@@ -294,17 +294,15 @@
     return { lower: build(lower), upper: build(upper) };
   }
 
-  // Baut je einen rechteckigen Metallrahmen (4 Balken) um den Umfang an der
-  // Fugenhöhe — einen an den Korpus (body), einen an den Deckel (lid).
-  function addSeamFrame(box, seamY, backZ, body, lid) {
-    var xMin = box.min.x, xMax = box.max.x, zMin = box.min.z, zMax = box.max.z;
-    var cx = (xMin + xMax) / 2, cz = (zMin + zMax) / 2;
-    var spanX = xMax - xMin, spanZ = zMax - zMin;
+  // Formschlüssiges Metallband an der Fuge: aus einem dünnen Querschnitt der
+  // Truhe selbst gebaut, minimal nach außen skaliert. Dadurch folgt es exakt
+  // der Truhenkontur, steht leicht über und überdeckt die Schnittkante von
+  // außen — geschlossen ist die Kante gar nicht mehr sichtbar. Sitzt am Korpus.
+  function addSeamBelt(meshes, box, seamY, body) {
+    var cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
     var modelH = box.max.y - box.min.y;
-
-    var margin = Math.max(spanX, spanZ) * 0.006;   // ragt nur minimal heraus
-    var fh = modelH * 0.028;                        // schmale Rahmenhöhe (dezent)
-    var ft = margin * 2.2;                          // Balken-Querschnitt
+    var bh = modelH * 0.045;     // halbe Bandhöhe (überlappt Fuge nach oben & unten)
+    var scaleXZ = 1.045;         // steht leicht über die Oberfläche
 
     var frameMat = new THREE.MeshStandardMaterial({
       color: 0xc4d3e6, metalness: 0.6, roughness: 0.4  // eisiges Silber wie die Beschläge
@@ -312,27 +310,30 @@
     frameMat.envMapIntensity = 0.2;
     frameMat.userData.frame = true;  // nicht mit der Truhen-Textur überziehen
 
-    // yC/zOff im jeweiligen Gruppen-Koordinatensystem:
-    //  body ist in Original-Koordinaten → yC=seamY, zOff=0
-    //  lid ist um (0,-seamY,-backZ) verschoben → yC=0, zOff=-backZ
-    function ring(group, yC, zOff) {
-      var exX = spanX + margin * 2 + ft, exZ = spanZ + margin * 2 + ft;
-      [zMin - margin, zMax + margin].forEach(function (zz) {
-        var m = new THREE.Mesh(new THREE.BoxGeometry(exX, fh, ft), frameMat);
-        m.position.set(cx, yC, zz + zOff);
-        m.castShadow = true;
-        group.add(m);
-      });
-      [xMin - margin, xMax + margin].forEach(function (xx) {
-        var m = new THREE.Mesh(new THREE.BoxGeometry(ft, fh, exZ), frameMat);
-        m.position.set(xx, yC, cz + zOff);
-        m.castShadow = true;
-        group.add(m);
-      });
-    }
+    var positions = [], normals = [], hasN = true;
+    meshes.forEach(function (m) {
+      var g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+      g.applyMatrix4(m.matrixWorld);
+      var pos = g.attributes.position, nor = g.attributes.normal;
+      if (!nor) hasN = false;
+      for (var i = 0; i < pos.count; i += 3) {
+        var cyT = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+        if (cyT < seamY - bh || cyT > seamY + bh) continue;
+        for (var v = 0; v < 3; v++) {
+          positions.push(cx + (pos.getX(i + v) - cx) * scaleXZ, pos.getY(i + v), cz + (pos.getZ(i + v) - cz) * scaleXZ);
+          if (nor) normals.push(nor.getX(i + v), nor.getY(i + v), nor.getZ(i + v));
+        }
+      }
+    });
+    if (!positions.length) return;
 
-    ring(body, seamY - fh * 0.5 + 0.001, 0);  // Korpus-Oberkante
-    ring(lid, fh * 0.5 - 0.001, -backZ);      // Deckel-Unterkante
+    var bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    if (hasN && normals.length) bg.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    else bg.computeVertexNormals();
+    var belt = new THREE.Mesh(bg, frameMat);
+    belt.castShadow = true;
+    body.add(belt);
   }
 
   function useGlbModel(arrayBuffer) {
@@ -383,10 +384,8 @@
         }
       });
 
-      // Sauberer Metallrahmen entlang der Fuge: verdeckt die Schnittkante und
-      // wirkt bewusst gestaltet. Je ein Rahmen an der Korpus-Oberkante (bleibt)
-      // und an der Deckel-Unterkante (bewegt sich mit dem Deckel).
-      addSeamFrame(box, seamY, backZ, body, lid);
+      // Formschlüssiges Metallband überdeckt die Schnittkante von außen.
+      addSeamBelt(meshes, box, seamY, body);
 
       lidGroup = lid;
       lidRestX = 0;
