@@ -172,6 +172,17 @@
     model.position.z = -(box.min.z + box.max.z) / 2;
     H = box.max.y - box.min.y;
 
+    // Farbtextur separat als Daten-URI laden (der GLTFLoader-Weg über blob:-URLs
+    // wird in der Claude-App/iOS von der CSP blockiert → Modell bliebe weiß).
+    // TextureLoader nutzt ein HTML-Image, das mit data: überall zuverlässig lädt.
+    var colorMap = null;
+    if (!tintModel && window.__CHEST_TEX_B64) {
+      colorMap = new THREE.TextureLoader().load('data:image/jpeg;base64,' + window.__CHEST_TEX_B64);
+      colorMap.flipY = false;            // glTF-Konvention
+      colorMap.encoding = THREE.sRGBEncoding;
+      colorMap.wrapS = colorMap.wrapT = THREE.RepeatWrapping;
+    }
+
     model.traverse(function (obj) {
       if (obj.isMesh) {
         obj.castShadow = true;
@@ -181,12 +192,16 @@
           if (tintModel) {
             m.envMapIntensity = 0.45;
           } else {
-            // KI-/GLB-Modell: oft voll metallisch → Umgebungsspiegelung dämpfen
-            // und Metalness deckeln, damit die Farbtextur sicher sichtbar bleibt
-            // (sonst auf hellen Geräten weiß/ausgewaschen).
+            // KI-/GLB-Modell: Umgebungsspiegelung dämpfen + Metalness deckeln,
+            // damit die Farbtextur sicher sichtbar bleibt (sonst weiß/ausgewaschen).
             m.envMapIntensity = 0.18;
             if (m.metalness == null || m.metalness > 0.5) m.metalness = 0.5;
             if (m.roughness == null || m.roughness < 0.5) m.roughness = 0.55;
+            if (colorMap) {
+              m.map = colorMap;
+              m.color.setHex(0xffffff);  // Textur bestimmt die Farbe
+              m.needsUpdate = true;
+            }
           }
         });
       }
