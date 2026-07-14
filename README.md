@@ -125,6 +125,17 @@ anderen 3D-Objekten), lohnt sich der native Weg:
 
 Dieser Prototyp dient dabei als Referenz für Timing, Easing und Effekt-Reihenfolge.
 
+## Eigenes KI-Modell verwenden (empfohlener Weg)
+
+Wie du aus einem Bild per KI (Meshy.ai / Tripo3d.ai, no-code) ein 3D-Modell machst
+und einbindest, steht Schritt für Schritt in **[ANLEITUNG-KI-3D.md](ANLEITUNG-KI-3D.md)**.
+Kurzfassung: GLB exportieren und als `assets/chest.glb` ins Repo legen — der Loader
+lädt es automatisch (eingebettetes Base64 → `assets/chest.glb` → eingebaute Truhe
+als Fallback) und schneidet den Deckel an der Fugenhöhe (`LID_SEAM` in
+`src/chest.js`) selbst ab, falls das Modell aus einem Stück besteht. Texturierte
+Modelle werden nicht umgefärbt; die Seltenheits-Stufen wechseln dann nur die
+Effektfarben.
+
 ## Eigene Truhen-Grafiken verwenden
 
 Die vier gelieferten Truhen-Bilder (Holz, Silber-Runen, Kristall, Gold-Amethyst) waren

@@ -148,16 +148,16 @@
 
   var modelReady = false;
   var lidGroup = null;
+  var lidRestX = 0;
+  var tintModel = true; // false bei texturierten KI-/GLB-Modellen: Texturen bleiben
   var matByName = {};   // benannte Modell-Materialien (Wood, DarkMetal, ...)
 
-  // Wird am Skript-Ende aufgerufen — greift auf Effekte (shaft, gem, ...) zu,
-  // die erst weiter unten definiert werden.
-  function loadModel() {
-    var built = buildChest(THREE);
-    var model = built.root;
-    lidGroup = built.lid;
-    matByName = built.materials;
+  // Fugenhöhe für den automatischen Deckel-Schnitt bei GLB-Modellen ohne
+  // separaten Deckel-Node (Anteil der Modellhöhe, von unten gemessen).
+  var LID_SEAM = 0.55;
 
+  // Gemeinsamer Abschluss für beide Modell-Pfade (handgebaut & GLB)
+  function finishModel(model) {
     // Auf Zielbreite skalieren und auf den Boden setzen
     var box = new THREE.Box3().setFromObject(model);
     var size = box.getSize(new THREE.Vector3());
@@ -172,6 +172,7 @@
     model.traverse(function (obj) {
       if (obj.isMesh) {
         obj.castShadow = true;
+        obj.frustumCulled = false;
         var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(function (m) { m.envMapIntensity = 0.45; });
       }
@@ -189,8 +190,123 @@
     applyTier(pickTier());
   }
 
+  function useBuiltModel() {
+    var built = buildChest(THREE);
+    lidGroup = built.lid;
+    lidRestX = 0;
+    tintModel = true;
+    matByName = built.materials;
+    finishModel(built.root);
+  }
+
+  // Zerlegt ein Mesh an der Fugenhöhe in Unter-/Oberteil (Dreieck-Schwerpunkt).
+  // Die Welt-Transformation wird dabei in die Geometrie gebacken.
+  function splitMeshAtY(mesh, seamY) {
+    var geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    geo.applyMatrix4(mesh.matrixWorld);
+    var attrs = Object.keys(geo.attributes);
+    var pos = geo.attributes.position;
+    var lower = {}, upper = {};
+    attrs.forEach(function (a) { lower[a] = []; upper[a] = []; });
+    for (var i = 0; i < pos.count; i += 3) {
+      var cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+      var dst = cy > seamY ? upper : lower;
+      attrs.forEach(function (a) {
+        var attr = geo.attributes[a], sz = attr.itemSize;
+        for (var v = 0; v < 3; v++) {
+          for (var k = 0; k < sz; k++) dst[a].push(attr.array[(i + v) * sz + k]);
+        }
+      });
+    }
+    function build(data) {
+      if (!data.position.length) return null;
+      var g = new THREE.BufferGeometry();
+      attrs.forEach(function (a) {
+        g.setAttribute(a, new THREE.Float32BufferAttribute(data[a], geo.attributes[a].itemSize));
+      });
+      return g;
+    }
+    return { lower: build(lower), upper: build(upper) };
+  }
+
+  function useGlbModel(arrayBuffer) {
+    new THREE.GLTFLoader().parse(arrayBuffer, '', function (gltf) {
+      var src = gltf.scene;
+      tintModel = false;
+      matByName = {};
+
+      // 1) Gibt es einen benannten Deckel-Node? Dann direkt verwenden.
+      var named = null;
+      src.traverse(function (o) {
+        if (!named && /(^|[_ -])(lid|top|deckel)([_ -]|$)/i.test(o.name || '')) named = o;
+      });
+      if (named) {
+        lidGroup = named;
+        lidRestX = named.rotation.x;
+        finishModel(src);
+        return;
+      }
+
+      // 2) Kein Deckel-Node: Geometrie an der Fugenhöhe automatisch zerschneiden.
+      src.updateMatrixWorld(true);
+      var box = new THREE.Box3().setFromObject(src);
+      var seamY = box.min.y + (box.max.y - box.min.y) * LID_SEAM;
+      var backZ = box.min.z + (box.max.z - box.min.z) * 0.02;
+
+      var meshes = [];
+      src.traverse(function (o) { if (o.isMesh) meshes.push(o); });
+
+      var model = new THREE.Group();
+      var body = new THREE.Group();
+      var lid = new THREE.Group();
+      lid.position.set(0, seamY, backZ);
+      model.add(body);
+      model.add(lid);
+
+      meshes.forEach(function (m) {
+        // DoubleSide kaschiert die offene Schnittkante von innen
+        var mats = Array.isArray(m.material) ? m.material : [m.material];
+        mats.forEach(function (mm) { mm.side = THREE.DoubleSide; });
+        var parts = splitMeshAtY(m, seamY);
+        if (parts.lower) body.add(new THREE.Mesh(parts.lower, m.material));
+        if (parts.upper) {
+          parts.upper.translate(0, -seamY, -backZ);
+          lid.add(new THREE.Mesh(parts.upper, m.material));
+        }
+      });
+
+      lidGroup = lid;
+      lidRestX = 0;
+      finishModel(model);
+    }, function (err) {
+      if (window.console) console.error('GLB konnte nicht geladen werden, nutze eingebaute Truhe', err);
+      useBuiltModel();
+    });
+  }
+
+  // Wird am Skript-Ende aufgerufen — greift auf Effekte (shaft, gem, ...) zu,
+  // die erst weiter unten definiert werden.
+  // Reihenfolge: eingebettetes GLB (Base64) → assets/chest.glb → handgebaute Truhe.
+  function loadModel() {
+    if (window.__CHEST_GLB_B64) {
+      var bin = atob(window.__CHEST_GLB_B64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      useGlbModel(bytes.buffer);
+      return;
+    }
+    if (window.fetch && location.protocol !== 'file:') {
+      fetch('assets/chest.glb')
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then(useGlbModel)
+        .catch(useBuiltModel);
+    } else {
+      useBuiltModel();
+    }
+  }
+
   function setLidAngle(eased) {
-    if (lidGroup) lidGroup.rotation.x = LID_OPEN * eased;
+    if (lidGroup) lidGroup.rotation.x = lidRestX + LID_OPEN * eased;
   }
 
   // Unsichtbare, großzügige Hitbox fürs Antippen
@@ -361,7 +477,9 @@
 
   function applyTier(next) {
     tier = next;
-    Object.keys(tier.mats).forEach(function (name) {
+    // Bei texturierten GLB-/KI-Modellen bleiben die Texturen unangetastet,
+    // nur die Effektfarben wechseln pro Stufe.
+    if (tintModel) Object.keys(tier.mats).forEach(function (name) {
       var m = matByName[name];
       if (!m) return;
       var def = tier.mats[name];
@@ -563,7 +681,7 @@
     var bob = state === 'idle' || state === 'closing' ? Math.sin(t * 1.8) * 0.015 : 0;
     chest.position.y = bob;
     // Rahmen (DarkMetal) glimmt sanft im eigenen Ton
-    if (tier && matByName.DarkMetal) {
+    if (tier && tintModel && matByName.DarkMetal) {
       var pulse = state === 'idle' ? 0.1 + Math.sin(t * 2.4) * 0.07 : 0.04;
       matByName.DarkMetal.emissive.copy(matByName.DarkMetal.color);
       matByName.DarkMetal.emissiveIntensity = pulse;
