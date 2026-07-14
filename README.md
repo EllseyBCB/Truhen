@@ -27,16 +27,24 @@ Die Animation folgt den klassischen Game-Feel-Prinzipien großer Mobile Games:
 6. **Reset** — Deckel schließt, die nächste zufällige Truhe wartet
 
 Technik: [Three.js](https://threejs.org) r147 (in `vendor/` lokal eingebunden, inkl.
-`GLTFLoader` und `RoomEnvironment`). Die Truhe ist das CC0-Modell **„Chest" von
-Quaternius** ([poly.pizza/m/eEcIqgJzJ1](https://poly.pizza/m/eEcIqgJzJ1), Public Domain),
-als Base64 in `assets/chest-glb.js` eingebettet — dadurch ist kein `fetch()` nötig und
-alles läuft auch von `file://` und im WKWebView. Der Deckel hängt am Skelett-Knochen
-`Chest_Top` und wird manuell mit Easing rotiert; die vier Truhen-Stufen entstehen durch
-Umfärben der benannten Modell-Materialien (`Wood`, `DarkMetal` = Rahmen, `Gold` =
-Schatz/Nieten, …). Dazu kommen echte Schatten, eine Environment-Map für realistische
-Metall-Reflexionen, Partikel- und Lichteffekte sowie per WebAudio synthetisierte Sounds.
-Die Logik ist eine kleine State-Machine in `src/chest.js`
-(`idle → opening → opened → closing`). `prefers-reduced-motion` wird respektiert.
+`RoomEnvironment` und `RoundedBoxGeometry`). Die Truhe ist ein **handgebautes 3D-Modell
+nach dem Referenzbild des Users** (`src/chest-model.js`): horizontale Holzplanken mit
+Fugen, Bronze-Rahmen mit Eckpfosten und Kugel-Nieten, seitliche Ringgriffe, ein
+extrudiertes Schlossschild mit Spitzbogen-Krone, ein Tonnenbogen-Deckel aus gebogenen
+Planken-Segmenten mit drei Bändern sowie ein Goldschatz mit Sternmünzen im Inneren —
+alles aus parametrischen Geometrien, null externe Assets. Der Deckel ist eine Gruppe
+mit Drehpunkt an der hinteren Oberkante und wird mit Easing rotiert; die vier
+Truhen-Stufen entstehen durch Umfärben der benannten Materialien (`Wood`/`Wood2` =
+Planken, `DarkMetal` = Rahmen, `Metal` = Nieten/Griffe, `Gold`/`Gold_Dark` = Schatz).
+Dazu kommen echte Schatten, eine Environment-Map für realistische Metall-Reflexionen,
+Partikel- und Lichteffekte sowie per WebAudio synthetisierte Sounds. Die Logik ist eine
+kleine State-Machine in `src/chest.js` (`idle → opening → opened → closing`).
+`prefers-reduced-motion` wird respektiert.
+
+Die feinen Schnitzerei-Ornamente des Referenzbilds sind bewusst nicht als Geometrie
+umgesetzt (zu filigran) — sie ließen sich später als Normal-/Textur-Map ergänzen.
+Eine frühere Variante mit dem CC0-Modell „Chest" von Quaternius liegt in der
+Git-History (Commit `e5caf80`).
 
 ## Einbindung in deine iOS-App (Swift / Xcode)
 
@@ -44,7 +52,7 @@ Die Logik ist eine kleine State-Machine in `src/chest.js`
 
 Die Demo läuft unverändert in einem `WKWebView`. So gehst du vor:
 
-1. Ziehe `index.html`, `src/`, `vendor/` und `assets/` in dein Xcode-Projekt
+1. Ziehe `index.html`, `src/` und `vendor/` in dein Xcode-Projekt
    (Häkchen bei „Copy items if needed", als **Folder Reference** hinzufügen).
 2. Füge diese SwiftUI-View hinzu:
 

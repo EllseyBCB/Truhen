@@ -1,12 +1,12 @@
 /*
  * Truhenöffnungs-Animation im Stil von Clash Royale & Co.
  *
- * Truhen-Modell: Quaternius "Chest" (CC0 / Public Domain, poly.pizza/m/eEcIqgJzJ1),
- * eingebettet als Base64 in assets/chest-glb.js. Der Deckel hängt am
- * Skelett-Knochen "Chest_Top" und wird manuell rotiert.
+ * Truhen-Modell: von Hand nach dem Referenzbild des Users modelliert
+ * (src/chest-model.js) — Planken, Bronze-Rahmen, Nieten, Ringgriffe,
+ * Schlossschild mit Krone und Goldschatz mit Sternmünzen.
  *
  * Vier Truhen-Stufen (nach den Referenzbildern des Users), umgesetzt durch
- * Umfärben der benannten Modell-Materialien (Wood, Gold, Metal, ...):
+ * Umfärben der benannten Modell-Materialien (Wood, DarkMetal, Gold, ...):
  *   Holztruhe → Runentruhe → Kristalltruhe → Goldtruhe
  *
  * Ablauf (State-Machine):
@@ -147,19 +147,16 @@
   scene.add(chest);
 
   var modelReady = false;
-  var lidBone = null;
-  var lidRestX = 0;
-  var matByName = {};   // benannte Modell-Materialien (Wood, Gold, ...)
+  var lidGroup = null;
+  var matByName = {};   // benannte Modell-Materialien (Wood, DarkMetal, ...)
 
-  function decodeGlb(b64) {
-    var bin = atob(b64);
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes.buffer;
-  }
-
-  new THREE.GLTFLoader().parse(decodeGlb(window.__CHEST_GLB_B64), '', function (gltf) {
-    var model = gltf.scene;
+  // Wird am Skript-Ende aufgerufen — greift auf Effekte (shaft, gem, ...) zu,
+  // die erst weiter unten definiert werden.
+  function loadModel() {
+    var built = buildChest(THREE);
+    var model = built.root;
+    lidGroup = built.lid;
+    matByName = built.materials;
 
     // Auf Zielbreite skalieren und auf den Boden setzen
     var box = new THREE.Box3().setFromObject(model);
@@ -173,42 +170,27 @@
     H = box.max.y - box.min.y;
 
     model.traverse(function (obj) {
-      if (obj.isMesh || obj.isSkinnedMesh) {
+      if (obj.isMesh) {
         obj.castShadow = true;
-        // Skinned-Mesh-Boundingbox stimmt bei rotiertem Deckel nicht mehr
-        obj.frustumCulled = false;
         var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach(function (m) {
-          m.envMapIntensity = 0.45;
-          matByName[m.name] = m;
-        });
+        mats.forEach(function (m) { m.envMapIntensity = 0.45; });
       }
-      if (obj.isBone && obj.name === 'Chest_Top') lidBone = obj;
     });
-
-    // Materialqualität anheben (Reflexionen kommen aus scene.environment)
-    ['Gold', 'Gold_Dark', 'Metal', 'DarkMetal'].forEach(function (n) {
-      if (matByName[n]) { matByName[n].metalness = 0.85; matByName[n].roughness = 0.35; }
-    });
-    if (matByName.Wood) { matByName.Wood.metalness = 0.0; matByName.Wood.roughness = 0.75; }
-
-    if (lidBone) lidRestX = lidBone.rotation.x;
 
     chest.add(model);
 
     // Effekt-Positionen an die echte Modellhöhe anpassen
     innerLight.position.y = H * 0.9;
     shaft.position.y = H + 1.5;
+    GEM_Y = H + 0.85;
+    LOOK_AT.y = H * 0.52;
 
     modelReady = true;
     applyTier(pickTier());
-  }, function (err) {
-    setHint('Modell konnte nicht geladen werden');
-    if (window.console) console.error(err);
-  });
+  }
 
   function setLidAngle(eased) {
-    if (lidBone) lidBone.rotation.x = lidRestX + LID_OPEN * eased;
+    if (lidGroup) lidGroup.rotation.x = LID_OPEN * eased;
   }
 
   // Unsichtbare, großzügige Hitbox fürs Antippen
@@ -306,10 +288,11 @@
       reward: 'HÄUFIG', rewardSub: 'Goldene Münzen',
       color: 0xffc94d, css: '#ffc94d',
       mats: {
-        Wood: { color: 0x6b3a14 },
+        Wood: { color: 0x54290b },
+        Wood2: { color: 0x653610 },
         Gold: { color: 0xe6b13c },
-        Gold_Dark: { color: 0x9a6a18 },
-        Metal: { color: 0x8a6a2c },
+        Gold_Dark: { color: 0xb07f2a },
+        Metal: { color: 0xd8b25e },
         DarkMetal: { color: 0xb98a3a }
       },
       weight: 0.4
@@ -319,10 +302,11 @@
       reward: 'SELTEN', rewardSub: 'Runen-Kristall',
       color: 0x54b6ff, css: '#54b6ff',
       mats: {
-        Wood: { color: 0x2a3458, emissive: 0x3a66ff, intensity: 0.3 },
+        Wood: { color: 0x27305a, emissive: 0x3a66ff, intensity: 0.3 },
+        Wood2: { color: 0x32406e, emissive: 0x3a66ff, intensity: 0.22 },
         Gold: { color: 0xe6b13c },
-        Gold_Dark: { color: 0x9a6a18 },
-        Metal: { color: 0x6f7f96 },
+        Gold_Dark: { color: 0xb07f2a },
+        Metal: { color: 0xc4d0de },
         DarkMetal: { color: 0x9fb0c4 }
       },
       weight: 0.3
@@ -333,9 +317,10 @@
       color: 0x7cd4ff, css: '#7cd4ff',
       mats: {
         Wood: { color: 0x3f9fe8, emissive: 0x2e8fe0, intensity: 0.7, roughness: 0.2 },
+        Wood2: { color: 0x6fc0f5, emissive: 0x4da8ea, intensity: 0.6, roughness: 0.2 },
         Gold: { color: 0xe6b13c },
-        Gold_Dark: { color: 0x9a6a18 },
-        Metal: { color: 0x8ea2ba },
+        Gold_Dark: { color: 0xb07f2a },
+        Metal: { color: 0xdde8f2 },
         DarkMetal: { color: 0xc3d2e2 }
       },
       weight: 0.2
@@ -346,9 +331,10 @@
       color: 0xc37bff, css: '#c37bff',
       mats: {
         Wood: { color: 0x552a72, emissive: 0x8a35e8, intensity: 0.18 },
+        Wood2: { color: 0x653382, emissive: 0x8a35e8, intensity: 0.14 },
         Gold: { color: 0xffc94d },
         Gold_Dark: { color: 0xb07f2a },
-        Metal: { color: 0xc79a2e },
+        Metal: { color: 0xf2c95c },
         DarkMetal: { color: 0xe6b13c }
       },
       weight: 0.1
@@ -719,7 +705,7 @@
     renderer.render(scene, camera);
   }
 
-  setHint('Lade Truhe …');
+  loadModel();
   animate();
 
   // Debug-/Test-Hooks (auch praktisch für automatisierte UI-Tests)
