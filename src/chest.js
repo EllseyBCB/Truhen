@@ -177,7 +177,18 @@
         obj.castShadow = true;
         obj.frustumCulled = false;
         var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach(function (m) { m.envMapIntensity = 0.45; });
+        mats.forEach(function (m) {
+          if (tintModel) {
+            m.envMapIntensity = 0.45;
+          } else {
+            // KI-/GLB-Modell: oft voll metallisch → Umgebungsspiegelung dämpfen
+            // und Metalness deckeln, damit die Farbtextur sicher sichtbar bleibt
+            // (sonst auf hellen Geräten weiß/ausgewaschen).
+            m.envMapIntensity = 0.18;
+            if (m.metalness == null || m.metalness > 0.5) m.metalness = 0.5;
+            if (m.roughness == null || m.roughness < 0.5) m.roughness = 0.55;
+          }
+        });
       }
     });
 
