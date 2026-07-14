@@ -1,7 +1,12 @@
 /*
  * Truhenöffnungs-Animation im Stil von Clash Royale & Co.
  *
- * Vier Truhen-Stufen (nach den Referenzbildern des Users):
+ * Truhen-Modell: Quaternius "Chest" (CC0 / Public Domain, poly.pizza/m/eEcIqgJzJ1),
+ * eingebettet als Base64 in assets/chest-glb.js. Der Deckel hängt am
+ * Skelett-Knochen "Chest_Top" und wird manuell rotiert.
+ *
+ * Vier Truhen-Stufen (nach den Referenzbildern des Users), umgesetzt durch
+ * Umfärben der benannten Modell-Materialien (Wood, Gold, Metal, ...):
  *   Holztruhe → Runentruhe → Kristalltruhe → Goldtruhe
  *
  * Ablauf (State-Machine):
@@ -24,10 +29,17 @@
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
   var scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x0e1626, 19, 42);
+
+  // Environment-Map für realistische Metall-Reflexionen
+  var pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
 
   var camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 60);
   var CAM_BASE = new THREE.Vector3(0, 2.7, 6.9);
@@ -46,24 +58,30 @@
   camera.position.copy(CAM_BASE);
 
   // ---------- Licht ----------
-  scene.add(new THREE.HemisphereLight(0xbdd4ff, 0x2a1c10, 0.85));
-  var key = new THREE.DirectionalLight(0xfff2dd, 1.7);
+  scene.add(new THREE.HemisphereLight(0xbdd4ff, 0x2a1c10, 0.45));
+  var key = new THREE.DirectionalLight(0xfff2dd, 1.1);
   key.position.set(4, 6, 5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -4; key.shadow.camera.right = 4;
+  key.shadow.camera.top = 5; key.shadow.camera.bottom = -2;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 20;
+  key.shadow.bias = -0.002;
   scene.add(key);
-  var rim = new THREE.DirectionalLight(0x6fa0ff, 0.9);
+  var rim = new THREE.DirectionalLight(0x6fa0ff, 0.55);
   rim.position.set(-5, 4, -6);
   scene.add(rim);
   var innerLight = new THREE.PointLight(0xffc24d, 0, 7, 2);
   innerLight.position.set(0, 1.1, 0);
   scene.add(innerLight);
 
-  // ---------- Canvas-Texturen (alles prozedural, keine Assets) ----------
+  // ---------- Canvas-Texturen (nur noch für Boden & Effekte) ----------
   function makeCanvas(size, draw) {
     var c = document.createElement('canvas');
     c.width = c.height = size;
     draw(c.getContext('2d'), size);
     var tx = new THREE.CanvasTexture(c);
-    tx.colorSpace = THREE.SRGBColorSpace;
+    tx.encoding = THREE.sRGBEncoding;
     return tx;
   }
 
@@ -74,77 +92,6 @@
     grad.addColorStop(1, '#0c1220');
     g.fillStyle = grad;
     g.fillRect(0, 0, s, s);
-  });
-
-  // Holzplanken in frei wählbaren Farbtönen
-  function plankTex(baseColor, shades, gapColor, grainColor) {
-    return makeCanvas(256, function (g, s) {
-      g.fillStyle = baseColor;
-      g.fillRect(0, 0, s, s);
-      for (var p = 0; p < 4; p++) {
-        g.fillStyle = shades[p % shades.length];
-        g.fillRect(p * 64, 0, 64, s);
-        g.fillStyle = gapColor;
-        g.fillRect(p * 64, 0, 3, s);
-      }
-      g.strokeStyle = grainColor;
-      for (var i = 0; i < 90; i++) {
-        var x = Math.random() * s, y = Math.random() * s, len = 20 + Math.random() * 60;
-        g.beginPath();
-        g.moveTo(x, y);
-        g.quadraticCurveTo(x + 3, y + len / 2, x, y + len);
-        g.stroke();
-      }
-    });
-  }
-
-  // Leuchtende Kristall-Facetten (Kristalltruhe)
-  var crystalTex = makeCanvas(256, function (g, s) {
-    var grad = g.createRadialGradient(s / 2, s / 2, 10, s / 2, s / 2, s * 0.7);
-    grad.addColorStop(0, '#7cd4ff');
-    grad.addColorStop(0.5, '#2e7fd6');
-    grad.addColorStop(1, '#173a7a');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, s, s);
-    for (var i = 0; i < 46; i++) {
-      var x = Math.random() * s, y = Math.random() * s, r = 14 + Math.random() * 34;
-      var a = Math.random() * Math.PI * 2;
-      g.beginPath();
-      g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-      g.lineTo(x + Math.cos(a + 2.2) * r, y + Math.sin(a + 2.2) * r);
-      g.lineTo(x + Math.cos(a + 4.2) * r, y + Math.sin(a + 4.2) * r);
-      g.closePath();
-      g.fillStyle = 'rgba(' + (120 + Math.random() * 135 | 0) + ',' + (190 + Math.random() * 65 | 0) + ',255,' + (0.1 + Math.random() * 0.22) + ')';
-      g.fill();
-      g.strokeStyle = 'rgba(220,245,255,0.35)';
-      g.stroke();
-    }
-  });
-
-  // Dunkler Stahl mit leuchtenden blauen Runen (Runentruhe)
-  var runeTex = makeCanvas(256, function (g, s) {
-    g.fillStyle = '#232c48';
-    g.fillRect(0, 0, s, s);
-    for (var p = 0; p < 4; p++) {
-      g.fillStyle = p % 2 ? '#283256' : '#1f2843';
-      g.fillRect(p * 64, 0, 64, s);
-      g.fillStyle = 'rgba(10,14,28,0.6)';
-      g.fillRect(p * 64, 0, 3, s);
-    }
-    g.strokeStyle = '#5d8dff';
-    g.lineWidth = 5;
-    g.lineCap = 'round';
-    g.shadowColor = '#6fa8ff';
-    g.shadowBlur = 12;
-    for (var i = 0; i < 7; i++) {
-      var x = 20 + Math.random() * (s - 40), y = 20 + Math.random() * (s - 70);
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + 12, y + 18);
-      g.lineTo(x - 6, y + 30);
-      g.lineTo(x + 8, y + 48);
-      g.stroke();
-    }
   });
 
   var glowTex = makeCanvas(64, function (g, s) {
@@ -173,77 +120,6 @@
     }
   });
 
-  var shadowTex = makeCanvas(128, function (g, s) {
-    var grad = g.createRadialGradient(s / 2, s / 2, 4, s / 2, s / 2, s / 2);
-    grad.addColorStop(0, 'rgba(0,0,0,0.5)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, s, s);
-  });
-
-  // ---------- Truhen-Stufen (nach den Referenzbildern) ----------
-  function metalMat(color) {
-    return new THREE.MeshStandardMaterial({ color: color, roughness: 0.34, metalness: 0.85, emissive: 0x000000 });
-  }
-  function bodyMat(map, opts) {
-    opts = opts || {};
-    var m = new THREE.MeshStandardMaterial({
-      map: map, color: opts.tint || 0xe8dcc8,
-      roughness: opts.roughness != null ? opts.roughness : 0.75,
-      metalness: opts.metalness || 0.05
-    });
-    if (opts.glow) {
-      m.emissiveMap = map;
-      m.emissive = new THREE.Color(opts.glow);
-      m.emissiveIntensity = opts.glowIntensity || 0.5;
-    }
-    return m;
-  }
-
-  var TIERS = [
-    {
-      label: 'Holztruhe',
-      reward: 'HÄUFIG', rewardSub: 'Goldene Münzen',
-      color: 0xffc94d, css: '#ffc94d',
-      body: bodyMat(plankTex('#9a642f', ['#a26a33', '#8f5b29', '#9c6630', '#93602c'], 'rgba(40,22,8,0.55)', 'rgba(50,28,10,0.28)')),
-      metal: metalMat(0xb07f2a),
-      weight: 0.4
-    },
-    {
-      label: 'Runentruhe',
-      reward: 'SELTEN', rewardSub: 'Runen-Kristall',
-      color: 0x54b6ff, css: '#54b6ff',
-      body: bodyMat(runeTex, { tint: 0xffffff, roughness: 0.55, metalness: 0.35, glow: 0x8fb4ff, glowIntensity: 0.5 }),
-      metal: metalMat(0xaab4c4),
-      weight: 0.3
-    },
-    {
-      label: 'Kristalltruhe',
-      reward: 'EPISCH', rewardSub: 'Eis-Kristall',
-      color: 0x7cd4ff, css: '#7cd4ff',
-      body: bodyMat(crystalTex, { tint: 0xffffff, roughness: 0.2, metalness: 0.1, glow: 0xbfe6ff, glowIntensity: 0.75 }),
-      metal: metalMat(0xb9c2d0),
-      weight: 0.2
-    },
-    {
-      label: 'Goldtruhe',
-      reward: 'LEGENDÄR', rewardSub: 'Amethyst',
-      color: 0xc37bff, css: '#c37bff',
-      body: bodyMat(plankTex('#4a2a5e', ['#553069', '#432454', '#4e2b62', '#3c2050'], 'rgba(18,8,26,0.6)', 'rgba(200,140,255,0.14)')),
-      metal: metalMat(0xe0a83f),
-      weight: 0.1
-    }
-  ];
-
-  function pickTier() {
-    var r = Math.random(), acc = 0;
-    for (var i = 0; i < TIERS.length; i++) {
-      acc += TIERS[i].weight;
-      if (r < acc) return TIERS[i];
-    }
-    return TIERS[0];
-  }
-
   // ---------- Boden ----------
   var ground = new THREE.Mesh(
     new THREE.CircleGeometry(15, 48),
@@ -252,110 +128,95 @@
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  var blobShadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.6, 2.6),
-    new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+  // Unsichtbarer Schattenfänger über dem Gradient-Boden
+  var shadowCatcher = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 12),
+    new THREE.ShadowMaterial({ opacity: 0.38 })
   );
-  blobShadow.rotation.x = -Math.PI / 2;
-  blobShadow.position.y = 0.01;
-  scene.add(blobShadow);
+  shadowCatcher.rotation.x = -Math.PI / 2;
+  shadowCatcher.position.y = 0.005;
+  shadowCatcher.receiveShadow = true;
+  scene.add(shadowCatcher);
 
-  // ---------- Truhe ----------
-  var W = 2.3, H = 1.15, D = 1.45;
-
-  var innerMat = new THREE.MeshStandardMaterial({ color: 0x2f1d0d, roughness: 1, side: THREE.BackSide });
-  var keyholeMat = new THREE.MeshStandardMaterial({ color: 0x241505, roughness: 0.9 });
+  // ---------- Truhen-Modell (Quaternius, CC0) ----------
+  var W = 2.3;      // Zielbreite der Truhe in Weltkoordinaten
+  var H = 1.5;      // tatsächliche Höhe, wird nach dem Laden gemessen
+  var D = 1.45;     // ungefähre Tiefe für die Hitbox
 
   var chest = new THREE.Group();
   scene.add(chest);
 
-  var woodMeshes = [];   // bekommen tier.body als Material
-  var metalMeshes = [];  // bekommen tier.metal als Material
+  var modelReady = false;
+  var lidBone = null;
+  var lidRestX = 0;
+  var matByName = {};   // benannte Modell-Materialien (Wood, Gold, ...)
 
-  var body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D));
-  body.position.y = H / 2;
-  chest.add(body);
-  woodMeshes.push(body);
+  function decodeGlb(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
 
-  var inner = new THREE.Mesh(new THREE.BoxGeometry(W - 0.06, H, D - 0.06), innerMat);
-  inner.position.y = H / 2 + 0.02;
-  chest.add(inner);
+  new THREE.GLTFLoader().parse(decodeGlb(window.__CHEST_GLB_B64), '', function (gltf) {
+    var model = gltf.scene;
 
-  // Metallbeschläge am Korpus
-  [-1, 1].forEach(function (side) {
-    var band = new THREE.Mesh(new THREE.BoxGeometry(0.16, H + 0.02, D + 0.04));
-    band.position.set(side * W * 0.33, H / 2, 0);
-    chest.add(band);
-    metalMeshes.push(band);
-  });
-  var baseTrim = new THREE.Mesh(new THREE.BoxGeometry(W + 0.06, 0.14, D + 0.06));
-  baseTrim.position.y = 0.07;
-  chest.add(baseTrim);
-  metalMeshes.push(baseTrim);
+    // Auf Zielbreite skalieren und auf den Boden setzen
+    var box = new THREE.Box3().setFromObject(model);
+    var size = box.getSize(new THREE.Vector3());
+    var scale = W / size.x;
+    model.scale.setScalar(scale);
+    box = new THREE.Box3().setFromObject(model);
+    model.position.y = -box.min.y;
+    model.position.x = -(box.min.x + box.max.x) / 2;
+    model.position.z = -(box.min.z + box.max.z) / 2;
+    H = box.max.y - box.min.y;
 
-  // Schlossplatte mit Schlüsselloch
-  var lockPlate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.42, 0.07));
-  lockPlate.position.set(0, H * 0.72, D / 2 + 0.035);
-  chest.add(lockPlate);
-  metalMeshes.push(lockPlate);
-  var keyhole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16), keyholeMat);
-  keyhole.rotation.x = Math.PI / 2;
-  keyhole.position.set(0, H * 0.76, D / 2 + 0.075);
-  chest.add(keyhole);
-  var keyslot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.03), keyholeMat);
-  keyslot.position.set(0, H * 0.68, D / 2 + 0.075);
-  chest.add(keyslot);
+    model.traverse(function (obj) {
+      if (obj.isMesh || obj.isSkinnedMesh) {
+        obj.castShadow = true;
+        // Skinned-Mesh-Boundingbox stimmt bei rotiertem Deckel nicht mehr
+        obj.frustumCulled = false;
+        var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(function (m) {
+          m.envMapIntensity = 0.45;
+          matByName[m.name] = m;
+        });
+      }
+      if (obj.isBone && obj.name === 'Chest_Top') lidBone = obj;
+    });
 
-  // Deckel: Gruppe mit Drehpunkt an der hinteren Oberkante
-  var lid = new THREE.Group();
-  lid.position.set(0, H, -D / 2);
-  chest.add(lid);
+    // Materialqualität anheben (Reflexionen kommen aus scene.environment)
+    ['Gold', 'Gold_Dark', 'Metal', 'DarkMetal'].forEach(function (n) {
+      if (matByName[n]) { matByName[n].metalness = 0.85; matByName[n].roughness = 0.35; }
+    });
+    if (matByName.Wood) { matByName.Wood.metalness = 0.0; matByName.Wood.roughness = 0.75; }
 
-  var lidPlate = new THREE.Mesh(new THREE.BoxGeometry(W, 0.08, D));
-  lidPlate.position.set(0, 0.04, D / 2);
-  lid.add(lidPlate);
-  woodMeshes.push(lidPlate);
+    if (lidBone) lidRestX = lidBone.rotation.x;
 
-  var lidDomeGeo = new THREE.CylinderGeometry(D / 2, D / 2, W, 32, 1, false, 0, Math.PI);
-  lidDomeGeo.rotateZ(Math.PI / 2);
-  var lidDome = new THREE.Mesh(lidDomeGeo);
-  lidDome.position.set(0, 0.08, D / 2);
-  lid.add(lidDome);
-  woodMeshes.push(lidDome);
+    chest.add(model);
 
-  [-0.33, 0, 0.33].forEach(function (fx) {
-    var bandGeo = new THREE.CylinderGeometry(D / 2 + 0.02, D / 2 + 0.02, 0.14, 32, 1, true, 0, Math.PI);
-    bandGeo.rotateZ(Math.PI / 2);
-    var band = new THREE.Mesh(bandGeo);
-    band.position.set(fx * W, 0.08, D / 2);
-    lid.add(band);
-    metalMeshes.push(band);
+    // Effekt-Positionen an die echte Modellhöhe anpassen
+    innerLight.position.y = H * 0.9;
+    shaft.position.y = H + 1.5;
+
+    modelReady = true;
+    applyTier(pickTier());
+  }, function (err) {
+    setHint('Modell konnte nicht geladen werden');
+    if (window.console) console.error(err);
   });
 
-  var hasp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.06));
-  hasp.position.set(0, -0.02, D + 0.04);
-  lid.add(hasp);
-  metalMeshes.push(hasp);
-
-  // Schatz im Inneren (wird erst beim Öffnen sichtbar/beleuchtet)
-  var treasureMat = new THREE.MeshStandardMaterial({
-    color: 0xffc24d, emissive: 0xff9d1f, emissiveIntensity: 0.55,
-    roughness: 0.3, metalness: 0.7
-  });
-  var treasure = new THREE.Group();
-  [[-0.5, 0.28], [0.45, 0.22], [0, 0.34], [-0.15, 0.2], [0.2, 0.3]].forEach(function (p) {
-    var nugget = new THREE.Mesh(new THREE.SphereGeometry(p[1], 14, 12), treasureMat);
-    nugget.position.set(p[0], H * 0.72, (Math.random() - 0.5) * 0.5);
-    treasure.add(nugget);
-  });
-  chest.add(treasure);
+  function setLidAngle(eased) {
+    if (lidBone) lidBone.rotation.x = lidRestX + LID_OPEN * eased;
+  }
 
   // Unsichtbare, großzügige Hitbox fürs Antippen
   var hitbox = new THREE.Mesh(
-    new THREE.BoxGeometry(W + 1.4, H + 2.0, D + 1.4),
+    new THREE.BoxGeometry(W + 1.4, 3.2, D + 1.4),
     new THREE.MeshBasicMaterial({ visible: false })
   );
-  hitbox.position.y = (H + 1.4) / 2;
+  hitbox.position.y = 1.6;
   scene.add(hitbox);
 
   // ---------- Effekte ----------
@@ -418,11 +279,13 @@
   // Münzen, die herausgeschleudert werden (Meshes werden wiederverwendet)
   var COINS = reducedMotion ? 6 : 15;
   var coinGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.035, 18);
-  var coinMat = metalMat(0xe0a83f);
+  var coinMat = new THREE.MeshStandardMaterial({ roughness: 0.34, metalness: 0.85 });
+  coinMat.color.setHex(0xe0a83f).convertSRGBToLinear();
   var coins = [];
   for (var ci = 0; ci < COINS; ci++) {
     var coin = new THREE.Mesh(coinGeo, coinMat);
     coin.visible = false;
+    coin.castShadow = true;
     scene.add(coin);
     coins.push({ mesh: coin, vel: new THREE.Vector3(), spin: new THREE.Vector3() });
   }
@@ -434,6 +297,101 @@
   var subEl = bannerEl.querySelector('.sub');
   var btnEl = document.getElementById('againBtn');
   var flashEl = document.getElementById('flash');
+
+  // ---------- Truhen-Stufen ----------
+  // Pro Stufe: Farben für die benannten Modell-Materialien + Effektfarbe.
+  var TIERS = [
+    {
+      label: 'Holztruhe',
+      reward: 'HÄUFIG', rewardSub: 'Goldene Münzen',
+      color: 0xffc94d, css: '#ffc94d',
+      mats: {
+        Wood: { color: 0x6b3a14 },
+        Gold: { color: 0xe6b13c },
+        Gold_Dark: { color: 0x9a6a18 },
+        Metal: { color: 0x8a6a2c },
+        DarkMetal: { color: 0xb98a3a }
+      },
+      weight: 0.4
+    },
+    {
+      label: 'Runentruhe',
+      reward: 'SELTEN', rewardSub: 'Runen-Kristall',
+      color: 0x54b6ff, css: '#54b6ff',
+      mats: {
+        Wood: { color: 0x2a3458, emissive: 0x3a66ff, intensity: 0.3 },
+        Gold: { color: 0xe6b13c },
+        Gold_Dark: { color: 0x9a6a18 },
+        Metal: { color: 0x6f7f96 },
+        DarkMetal: { color: 0x9fb0c4 }
+      },
+      weight: 0.3
+    },
+    {
+      label: 'Kristalltruhe',
+      reward: 'EPISCH', rewardSub: 'Eis-Kristall',
+      color: 0x7cd4ff, css: '#7cd4ff',
+      mats: {
+        Wood: { color: 0x3f9fe8, emissive: 0x2e8fe0, intensity: 0.7, roughness: 0.2 },
+        Gold: { color: 0xe6b13c },
+        Gold_Dark: { color: 0x9a6a18 },
+        Metal: { color: 0x8ea2ba },
+        DarkMetal: { color: 0xc3d2e2 }
+      },
+      weight: 0.2
+    },
+    {
+      label: 'Goldtruhe',
+      reward: 'LEGENDÄR', rewardSub: 'Amethyst',
+      color: 0xc37bff, css: '#c37bff',
+      mats: {
+        Wood: { color: 0x552a72, emissive: 0x8a35e8, intensity: 0.18 },
+        Gold: { color: 0xffc94d },
+        Gold_Dark: { color: 0xb07f2a },
+        Metal: { color: 0xc79a2e },
+        DarkMetal: { color: 0xe6b13c }
+      },
+      weight: 0.1
+    }
+  ];
+
+  var tier = null;
+
+  // r147 interpretiert setHex() als linearen Farbwert; wir geben aber sRGB-Hexwerte
+  // an und rendern mit sRGB-Output → explizit konvertieren, sonst wirkt alles ausgeblichen.
+  function srgb(target, hex) {
+    target.setHex(hex).convertSRGBToLinear();
+    return target;
+  }
+
+  function pickTier() {
+    var r = Math.random(), acc = 0;
+    for (var i = 0; i < TIERS.length; i++) {
+      acc += TIERS[i].weight;
+      if (r < acc) return TIERS[i];
+    }
+    return TIERS[0];
+  }
+
+  function applyTier(next) {
+    tier = next;
+    Object.keys(tier.mats).forEach(function (name) {
+      var m = matByName[name];
+      if (!m) return;
+      var def = tier.mats[name];
+      srgb(m.color, def.color);
+      srgb(m.emissive, def.emissive || 0x000000);
+      m.emissiveIntensity = def.intensity || 0;
+      if (def.roughness != null) m.roughness = def.roughness;
+    });
+    srgb(gemMat.color, tier.color);
+    srgb(gemMat.emissive, tier.color);
+    srgb(gemGlow.material.color, tier.color);
+    srgb(rays.material.color, tier.color);
+    srgb(shaft.material.color, tier.color);
+    innerLight.color.setHex(tier.color);
+    setHint('Tippe die ' + tier.label + ' an!');
+  }
 
   // ---------- Sound (synthetisiert, kein Asset) ----------
   var actx = null;
@@ -495,26 +453,11 @@
   var GEM_Y = 2.15;
 
   var TAPS_NEEDED = 3;
-  var LID_OPEN = -1.92;  // Zielwinkel des Deckels (≈ 110°)
-
-  var tier = null;
+  var LID_OPEN = -1.92;  // Deckel-Winkeldelta am Knochen (≈ 110°)
 
   function setHint(text) {
     hintEl.textContent = text;
     hintEl.classList.remove('hidden');
-  }
-
-  function applyTier(next) {
-    tier = next;
-    woodMeshes.forEach(function (m) { m.material = tier.body; });
-    metalMeshes.forEach(function (m) { m.material = tier.metal; });
-    gemMat.color.setHex(tier.color);
-    gemMat.emissive.setHex(tier.color);
-    gemGlow.material.color.setHex(tier.color);
-    rays.material.color.setHex(tier.color);
-    shaft.material.color.setHex(tier.color);
-    innerLight.color.setHex(tier.color);
-    setHint('Tippe die ' + tier.label + ' an!');
   }
 
   // Meldet das Ergebnis an eine native iOS-App (WKWebView-Bridge).
@@ -596,7 +539,7 @@
   var pointer = new THREE.Vector2();
 
   renderer.domElement.addEventListener('pointerdown', function (ev) {
-    if (state !== 'idle') return;
+    if (state !== 'idle' || !modelReady) return;
     pointer.x = (ev.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(ev.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
@@ -630,12 +573,15 @@
     var dt = Math.min(clock.getDelta(), 0.05);
     var t = clock.elapsedTime;
 
-    // Idle: sanftes Wippen + pulsierendes Schloss
+    // Idle: sanftes Wippen + pulsierende Beschläge
     var bob = state === 'idle' || state === 'closing' ? Math.sin(t * 1.8) * 0.015 : 0;
     chest.position.y = bob;
-    // Beschläge glimmen im eigenen Metallton, damit z.B. Gold golden bleibt
-    tier.metal.emissive.copy(tier.metal.color);
-    tier.metal.emissiveIntensity = state === 'idle' ? 0.1 + Math.sin(t * 2.4) * 0.07 : 0.04;
+    // Rahmen (DarkMetal) glimmt sanft im eigenen Ton
+    if (tier && matByName.DarkMetal) {
+      var pulse = state === 'idle' ? 0.1 + Math.sin(t * 2.4) * 0.07 : 0.04;
+      matByName.DarkMetal.emissive.copy(matByName.DarkMetal.color);
+      matByName.DarkMetal.emissiveIntensity = pulse;
+    }
 
     // Tap-Wackeln (gedämpfte Schwingung, Squash & Stretch)
     if (tapAnim > 0) {
@@ -663,7 +609,7 @@
 
       // Deckel springt mit Overshoot auf
       var q = clamp01((openT - 0.18) / 0.55);
-      lid.rotation.x = easeOutBack(q) * LID_OPEN;
+      setLidAngle(easeOutBack(q));
       innerLight.intensity = q * 3.8;
       shaft.material.opacity = q * 0.24;
       shaft.scale.set(1, 0.2 + q * 0.8, 1);
@@ -708,7 +654,7 @@
     if (state === 'closing') {
       closeT += dt;
       var c = clamp01(closeT / 0.35);
-      lid.rotation.x = (1 - easeInCubic(c)) * LID_OPEN;
+      setLidAngle(1 - easeInCubic(c));
       innerLight.intensity = (1 - c) * 3;
       shaft.material.opacity = (1 - c) * 0.15;
       var fade = 1 - c;
@@ -773,13 +719,22 @@
     renderer.render(scene, camera);
   }
 
-  applyTier(pickTier());
+  setHint('Lade Truhe …');
   animate();
 
   // Debug-/Test-Hooks (auch praktisch für automatisierte UI-Tests)
   window.__chest = {
     setTier: function (i) { applyTier(TIERS[i]); },
-    open: function () { if (state === 'idle') startOpen(); },
+    applyTierRaw: applyTier,
+    open: function () { if (state === 'idle' && modelReady) startOpen(); },
+    setLid: setLidAngle,
+    mats: function () {
+      return Object.keys(matByName).map(function (n) {
+        var m = matByName[n];
+        return n + ':' + m.color.getHexString() + ' vc:' + !!m.vertexColors + ' map:' + !!m.map;
+      });
+    },
+    ready: function () { return modelReady; },
     state: function () { return state; }
   };
 })();

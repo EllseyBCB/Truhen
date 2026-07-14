@@ -26,11 +26,17 @@ Die Animation folgt den klassischen Game-Feel-Prinzipien großer Mobile Games:
    Seltenheits-Banner erscheint
 6. **Reset** — Deckel schließt, die nächste zufällige Truhe wartet
 
-Technik: [Three.js](https://threejs.org) (in `vendor/` lokal eingebunden), die Truhe ist
-prozedural aus Box-/Zylinder-Geometrien gebaut, alle Texturen werden zur Laufzeit per
-Canvas gezeichnet, Sounds per WebAudio synthetisiert. Die Logik ist eine kleine
-State-Machine in `src/chest.js` (`idle → opening → opened → closing`).
-`prefers-reduced-motion` wird respektiert.
+Technik: [Three.js](https://threejs.org) r147 (in `vendor/` lokal eingebunden, inkl.
+`GLTFLoader` und `RoomEnvironment`). Die Truhe ist das CC0-Modell **„Chest" von
+Quaternius** ([poly.pizza/m/eEcIqgJzJ1](https://poly.pizza/m/eEcIqgJzJ1), Public Domain),
+als Base64 in `assets/chest-glb.js` eingebettet — dadurch ist kein `fetch()` nötig und
+alles läuft auch von `file://` und im WKWebView. Der Deckel hängt am Skelett-Knochen
+`Chest_Top` und wird manuell mit Easing rotiert; die vier Truhen-Stufen entstehen durch
+Umfärben der benannten Modell-Materialien (`Wood`, `DarkMetal` = Rahmen, `Gold` =
+Schatz/Nieten, …). Dazu kommen echte Schatten, eine Environment-Map für realistische
+Metall-Reflexionen, Partikel- und Lichteffekte sowie per WebAudio synthetisierte Sounds.
+Die Logik ist eine kleine State-Machine in `src/chest.js`
+(`idle → opening → opened → closing`). `prefers-reduced-motion` wird respektiert.
 
 ## Einbindung in deine iOS-App (Swift / Xcode)
 
@@ -38,7 +44,7 @@ State-Machine in `src/chest.js` (`idle → opening → opened → closing`).
 
 Die Demo läuft unverändert in einem `WKWebView`. So gehst du vor:
 
-1. Ziehe `index.html`, `src/` und `vendor/` in dein Xcode-Projekt
+1. Ziehe `index.html`, `src/`, `vendor/` und `assets/` in dein Xcode-Projekt
    (Häkchen bei „Copy items if needed", als **Folder Reference** hinzufügen).
 2. Füge diese SwiftUI-View hinzu:
 
