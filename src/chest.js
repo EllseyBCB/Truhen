@@ -155,6 +155,9 @@
   // Fugenhöhe für den automatischen Deckel-Schnitt bei GLB-Modellen ohne
   // separaten Deckel-Node (Anteil der Modellhöhe, von unten gemessen).
   var LID_SEAM = window.__SEAM || 0.62;   // Fugenhöhe für den Auto-Deckel-Schnitt
+  // Y-Drehung des GLB-Modells, damit die Schloss-Front zur Kamera zeigt
+  // (die Meshy-Kristalltruhe ist 90° gedreht ausgerichtet).
+  var MODEL_YAW = window.__YAW != null ? window.__YAW : Math.PI / 2;
 
   // Gemeinsamer Abschluss für beide Modell-Pfade (handgebaut & GLB)
   function finishModel(model) {
@@ -248,6 +251,8 @@
       }
 
       // 2) Kein Deckel-Node: Geometrie an der Fugenhöhe automatisch zerschneiden.
+      // Vorher das Modell so drehen, dass die Schloss-Front zur Kamera (+Z) zeigt.
+      src.rotation.y = MODEL_YAW;
       src.updateMatrixWorld(true);
       var box = new THREE.Box3().setFromObject(src);
       var seamY = box.min.y + (box.max.y - box.min.y) * LID_SEAM;
