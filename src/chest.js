@@ -154,7 +154,7 @@
 
   // Fugenhöhe für den automatischen Deckel-Schnitt bei GLB-Modellen ohne
   // separaten Deckel-Node (Anteil der Modellhöhe, von unten gemessen).
-  var LID_SEAM = 0.55;
+  var LID_SEAM = window.__SEAM || 0.62;   // Fugenhöhe für den Auto-Deckel-Schnitt
 
   // Gemeinsamer Abschluss für beide Modell-Pfade (handgebaut & GLB)
   function finishModel(model) {
@@ -277,6 +277,9 @@
 
       lidGroup = lid;
       lidRestX = 0;
+      // Massiver Block ohne echten Hohlraum → flacher öffnen, damit die
+      // Schnittfläche verdeckt bleibt (sofern nicht per URL überschrieben).
+      if (!window.__LIDOPEN) LID_OPEN = -0.75;
       finishModel(model);
     }, function (err) {
       if (window.console) console.error('GLB konnte nicht geladen werden, nutze eingebaute Truhe', err);
@@ -494,7 +497,8 @@
     srgb(rays.material.color, tier.color);
     srgb(shaft.material.color, tier.color);
     innerLight.color.setHex(tier.color);
-    setHint('Tippe die ' + tier.label + ' an!');
+    // Bei festem KI-Modell wechselt nur die Belohnung, nicht die Truhe selbst
+    setHint(tintModel ? ('Tippe die ' + tier.label + ' an!') : 'Tippe die Truhe an!');
   }
 
   // ---------- Sound (synthetisiert, kein Asset) ----------
@@ -557,7 +561,10 @@
   var GEM_Y = 2.15;
 
   var TAPS_NEEDED = 3;
-  var LID_OPEN = -1.92;  // Deckel-Winkeldelta am Knochen (≈ 110°)
+  // Deckel-Öffnungswinkel: volle ~110° für Modelle mit echtem Hohlraum
+  // (handgebaut / benannter Deckel), flacher ~43° beim Auto-Split massiver
+  // KI-Modelle, damit die flache Schnittfläche verdeckt bleibt.
+  var LID_OPEN = window.__LIDOPEN || -1.92;
 
   function setHint(text) {
     hintEl.textContent = text;
