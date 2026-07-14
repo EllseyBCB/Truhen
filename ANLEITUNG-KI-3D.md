@@ -55,6 +55,22 @@ eingeschränkt kommerziell nutzbar (z.B. CC-BY). Für eine veröffentlichte App 
 Bezahlplan des Dienstes prüfen — dort bekommst du private Modelle mit vollen
 kommerziellen Rechten.
 
+## Problem: „Modell zu groß" / Download klemmt (z.B. über 30 MB)
+
+KI-Generatoren erzeugen zunächst riesige Modelle (Millionen Dreiecke, 4K-Texturen).
+Über 30 MB greifen dann Download-/Upload-Limits — und fürs Handy wäre das Modell
+ohnehin zu schwer. **Ziel: 2–5 MB.**
+
+**Weg A (in Meshy, empfohlen):** Modell öffnen → **Remesh** bzw. die
+Export-Einstellungen nutzen → Polygonzahl auf **~30.000 Dreiecke** und Textur auf
+**1024 × 1024** stellen → erst dann als GLB exportieren. Damit ist die Datei nur
+noch wenige MB groß.
+
+**Weg B (Datei einfach abgeben):** Wenn der Export sich nicht verkleinern lässt,
+die große Datei einfach per **Google Drive** (mit der Claude-Session verbunden)
+oder als Download-Link abgeben — die Verkleinerung (Polygon-Reduktion +
+Textur-Kompression mit `gltf-transform`) übernimmt dann die Gegenseite.
+
 ## Schritt 4: Modell abgeben — den Rest übernimmt die Pipeline
 
 Lege die Datei als **`assets/chest.glb`** ins Repository (GitHub → „Add file →
