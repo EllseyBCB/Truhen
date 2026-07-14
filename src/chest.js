@@ -302,9 +302,9 @@
     var spanX = xMax - xMin, spanZ = zMax - zMin;
     var modelH = box.max.y - box.min.y;
 
-    var margin = Math.max(spanX, spanZ) * 0.02;   // ragt seitlich heraus
-    var fh = modelH * 0.075;                        // Rahmenhöhe
-    var ft = margin * 2.4;                          // Balken-Querschnitt
+    var margin = Math.max(spanX, spanZ) * 0.006;   // ragt nur minimal heraus
+    var fh = modelH * 0.028;                        // schmale Rahmenhöhe (dezent)
+    var ft = margin * 2.2;                          // Balken-Querschnitt
 
     var frameMat = new THREE.MeshStandardMaterial({
       color: 0xc4d3e6, metalness: 0.6, roughness: 0.4  // eisiges Silber wie die Beschläge
