@@ -228,25 +228,60 @@
     finishModel(built.root);
   }
 
-  // Zerlegt ein Mesh an der Fugenhöhe in Unter-/Oberteil (Dreieck-Schwerpunkt).
-  // Die Welt-Transformation wird dabei in die Geometrie gebacken.
+  // Zerlegt ein Mesh an der Ebene y=seamY in Unter-/Oberteil. Dreiecke, die
+  // die Ebene schneiden, werden exakt an der Linie zerschnitten (echtes
+  // Plane-Clipping mit Attribut-Interpolation) → glatte, gerade Schnittkante
+  // statt zackigem „zerrissenes Blatt"-Rand. Weltmatrix wird eingebacken.
   function splitMeshAtY(mesh, seamY) {
     var geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
     geo.applyMatrix4(mesh.matrixWorld);
     var attrs = Object.keys(geo.attributes);
-    var pos = geo.attributes.position;
     var lower = {}, upper = {};
     attrs.forEach(function (a) { lower[a] = []; upper[a] = []; });
-    for (var i = 0; i < pos.count; i += 3) {
-      var cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
-      var dst = cy > seamY ? upper : lower;
+
+    function vert(i) {
+      var v = {};
       attrs.forEach(function (a) {
-        var attr = geo.attributes[a], sz = attr.itemSize;
-        for (var v = 0; v < 3; v++) {
-          for (var k = 0; k < sz; k++) dst[a].push(attr.array[(i + v) * sz + k]);
-        }
+        var attr = geo.attributes[a], sz = attr.itemSize, arr = [];
+        for (var k = 0; k < sz; k++) arr.push(attr.array[i * sz + k]);
+        v[a] = arr;
       });
+      return v;
     }
+    function y(v) { return v.position[1]; }
+    function lerpV(a, b, t) {
+      var v = {};
+      attrs.forEach(function (name) {
+        var out = [], A = a[name], B = b[name];
+        for (var k = 0; k < A.length; k++) out.push(A[k] + (B[k] - A[k]) * t);
+        v[name] = out;
+      });
+      return v;
+    }
+    function clip(a, b) { return lerpV(a, b, (seamY - y(a)) / (y(b) - y(a))); }
+    function push(dst, v) { attrs.forEach(function (n) { for (var k = 0; k < v[n].length; k++) dst[n].push(v[n][k]); }); }
+    function tri(dst, a, b, c) { push(dst, a); push(dst, b); push(dst, c); }
+
+    var pos = geo.attributes.position;
+    for (var i = 0; i < pos.count; i += 3) {
+      var v0 = vert(i), v1 = vert(i + 1), v2 = vert(i + 2);
+      var above = [], below = [];
+      [v0, v1, v2].forEach(function (v) { (y(v) >= seamY ? above : below).push(v); });
+      if (below.length === 3) { tri(lower, v0, v1, v2); continue; }
+      if (above.length === 3) { tri(upper, v0, v1, v2); continue; }
+      if (above.length === 1) {
+        var A = above[0], B = below[0], C = below[1];
+        var P = clip(A, B), Q = clip(A, C);
+        tri(upper, A, P, Q);
+        tri(lower, P, B, C); tri(lower, P, C, Q);
+      } else {
+        var A2 = above[0], B2 = above[1], C2 = below[0];
+        var P2 = clip(A2, C2), Q2 = clip(B2, C2);
+        tri(lower, C2, P2, Q2);
+        tri(upper, A2, B2, Q2); tri(upper, A2, Q2, P2);
+      }
+    }
+
     function build(data) {
       if (!data.position.length) return null;
       var g = new THREE.BufferGeometry();
