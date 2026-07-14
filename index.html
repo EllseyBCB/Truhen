@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Truhen-Animation · 3D-Prototyp</title>
+<style>
+  :root {
+    --bg-deep: #0c1220;
+    --bg-glow: #223052;
+    --ink: #e8ecf5;
+    --ink-dim: #93a0bd;
+    --gold: #ffc94d;
+    --gold-deep: #e0a83f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    overflow: hidden;
+    background: radial-gradient(1200px 800px at 50% 18%, var(--bg-glow), var(--bg-deep) 72%);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  #scene { position: fixed; inset: 0; }
+  #scene canvas { display: block; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; align-items: center; }
+
+  .eyebrow {
+    margin-top: max(18px, env(safe-area-inset-top));
+    font-size: 11px; font-weight: 700; letter-spacing: 0.32em;
+    color: var(--ink-dim); text-transform: uppercase;
+  }
+  .eyebrow b { color: var(--gold); font-weight: 800; }
+
+  #banner {
+    position: fixed; left: 50%; top: 16%;
+    transform: translateX(-50%) scale(0.6);
+    opacity: 0; text-align: center;
+    transition: opacity .35s ease, transform .45s cubic-bezier(.18,1.6,.4,1);
+  }
+  #banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #banner .rarity {
+    font-size: clamp(34px, 8vw, 58px); font-weight: 900;
+    letter-spacing: 0.14em; line-height: 1;
+    color: var(--rarity, var(--gold));
+    text-shadow: 0 0 26px color-mix(in srgb, var(--rarity, var(--gold)) 55%, transparent),
+                 0 2px 0 rgba(0,0,0,.45);
+  }
+  #banner .sub {
+    margin-top: 10px; font-size: 14px; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-dim);
+  }
+
+  #hint {
+    position: fixed; left: 50%; bottom: max(9%, calc(24px + env(safe-area-inset-bottom)));
+    transform: translateX(-50%);
+    padding: 10px 22px; border-radius: 999px;
+    background: rgba(10, 16, 30, 0.72);
+    border: 1px solid rgba(255, 201, 77, 0.35);
+    font-size: 14px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--gold);
+    animation: hintPulse 1.6s ease-in-out infinite;
+    transition: opacity .25s ease;
+    white-space: nowrap;
+  }
+  #hint.hidden { opacity: 0; }
+  @keyframes hintPulse {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50%      { transform: translateX(-50%) scale(1.06); }
+  }
+
+  #againBtn {
+    position: fixed; left: 50%; bottom: max(8%, calc(22px + env(safe-area-inset-bottom)));
+    transform: translateX(-50%) translateY(24px);
+    opacity: 0; pointer-events: none;
+    padding: 14px 34px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, #ffd873, var(--gold-deep));
+    box-shadow: 0 4px 0 #9c6a12, 0 10px 26px rgba(224, 168, 63, 0.35);
+    color: #3d2600; font-family: inherit;
+    font-size: 15px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  #againBtn.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  #againBtn:active { transform: translateX(-50%) translateY(3px); box-shadow: 0 1px 0 #9c6a12, 0 6px 14px rgba(224, 168, 63, 0.3); }
+
+  #flash { position: fixed; inset: 0; background: #fff8e6; opacity: 0; pointer-events: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #hint { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="scene"></div>
+  <div class="hud">
+    <div class="eyebrow">Truhen-Prototyp · <b>3D-Demo</b></div>
+  </div>
+  <div id="banner"><div class="rarity"></div><div class="sub"></div></div>
+  <div id="hint">Tippe die Truhe an!</div>
+  <button id="againBtn" type="button">Nochmal öffnen</button>
+  <div id="flash"></div>
+  <script src="vendor/three.min.js"></script>
+  <script src="src/chest.js"></script>
+</body>
+</html>
