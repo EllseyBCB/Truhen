@@ -189,6 +189,7 @@
         obj.frustumCulled = false;
         var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(function (m) {
+          if (m.userData && m.userData.frame) return;  // Metallrahmen unangetastet
           if (tintModel) {
             m.envMapIntensity = 0.45;
           } else {
@@ -293,6 +294,47 @@
     return { lower: build(lower), upper: build(upper) };
   }
 
+  // Baut je einen rechteckigen Metallrahmen (4 Balken) um den Umfang an der
+  // Fugenhöhe — einen an den Korpus (body), einen an den Deckel (lid).
+  function addSeamFrame(box, seamY, backZ, body, lid) {
+    var xMin = box.min.x, xMax = box.max.x, zMin = box.min.z, zMax = box.max.z;
+    var cx = (xMin + xMax) / 2, cz = (zMin + zMax) / 2;
+    var spanX = xMax - xMin, spanZ = zMax - zMin;
+    var modelH = box.max.y - box.min.y;
+
+    var margin = Math.max(spanX, spanZ) * 0.02;   // ragt seitlich heraus
+    var fh = modelH * 0.075;                        // Rahmenhöhe
+    var ft = margin * 2.4;                          // Balken-Querschnitt
+
+    var frameMat = new THREE.MeshStandardMaterial({
+      color: 0xc4d3e6, metalness: 0.6, roughness: 0.4  // eisiges Silber wie die Beschläge
+    });
+    frameMat.envMapIntensity = 0.2;
+    frameMat.userData.frame = true;  // nicht mit der Truhen-Textur überziehen
+
+    // yC/zOff im jeweiligen Gruppen-Koordinatensystem:
+    //  body ist in Original-Koordinaten → yC=seamY, zOff=0
+    //  lid ist um (0,-seamY,-backZ) verschoben → yC=0, zOff=-backZ
+    function ring(group, yC, zOff) {
+      var exX = spanX + margin * 2 + ft, exZ = spanZ + margin * 2 + ft;
+      [zMin - margin, zMax + margin].forEach(function (zz) {
+        var m = new THREE.Mesh(new THREE.BoxGeometry(exX, fh, ft), frameMat);
+        m.position.set(cx, yC, zz + zOff);
+        m.castShadow = true;
+        group.add(m);
+      });
+      [xMin - margin, xMax + margin].forEach(function (xx) {
+        var m = new THREE.Mesh(new THREE.BoxGeometry(ft, fh, exZ), frameMat);
+        m.position.set(xx, yC, cz + zOff);
+        m.castShadow = true;
+        group.add(m);
+      });
+    }
+
+    ring(body, seamY - fh * 0.5 + 0.001, 0);  // Korpus-Oberkante
+    ring(lid, fh * 0.5 - 0.001, -backZ);      // Deckel-Unterkante
+  }
+
   function useGlbModel(arrayBuffer) {
     new THREE.GLTFLoader().parse(arrayBuffer, '', function (gltf) {
       var src = gltf.scene;
@@ -340,6 +382,11 @@
           lid.add(new THREE.Mesh(parts.upper, m.material));
         }
       });
+
+      // Sauberer Metallrahmen entlang der Fuge: verdeckt die Schnittkante und
+      // wirkt bewusst gestaltet. Je ein Rahmen an der Korpus-Oberkante (bleibt)
+      // und an der Deckel-Unterkante (bewegt sich mit dem Deckel).
+      addSeamFrame(box, seamY, backZ, body, lid);
 
       lidGroup = lid;
       lidRestX = 0;
