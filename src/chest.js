@@ -501,6 +501,9 @@
     color: 0xffc94d, emissive: 0xffc94d, emissiveIntensity: 0.5,
     roughness: 0.15, metalness: 0.2, flatShading: true
   });
+  // Der große zentrale Kristall ist deaktiviert — die Belohnungen werden als
+  // Kärtchen gezeigt. Lichtsäule, Flash und Funken-Burst bleiben.
+  var SHOW_GEM = false;
   var gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.46, 0), gemMat);
   gem.visible = false;
   scene.add(gem);
@@ -988,7 +991,7 @@
 
       // Kristall steigt auf
       var g = clamp01((openT - 0.5) / 0.9);
-      if (g > 0) {
+      if (SHOW_GEM && g > 0) {
         gem.visible = true;
         gem.position.set(0, H * 0.6 + easeOutCubic(g) * (GEM_Y - H * 0.6), 0);
         var gs = easeOutBack(g);
@@ -1006,14 +1009,16 @@
     }
 
     if (state === 'opened') {
-      // Kristall schwebt, Strahlen rotieren, Lichtsäule beruhigt sich
-      gem.position.y = GEM_Y + Math.sin(t * 1.7) * 0.08;
-      gem.rotation.y += dt * 1.3;
-      gemGlow.position.copy(gem.position);
-      gemGlow.material.opacity = 0.6 + Math.sin(t * 3) * 0.12;
-      rays.position.copy(gem.position);
-      rays.material.rotation -= dt * 0.45;
-      rays.material.opacity = 0.7;
+      if (SHOW_GEM) {
+        gem.position.y = GEM_Y + Math.sin(t * 1.7) * 0.08;
+        gem.rotation.y += dt * 1.3;
+        gemGlow.position.copy(gem.position);
+        gemGlow.material.opacity = 0.6 + Math.sin(t * 3) * 0.12;
+        rays.position.copy(gem.position);
+        rays.material.rotation -= dt * 0.45;
+        rays.material.opacity = 0.7;
+      }
+      // Lichtsäule beruhigt sich, Innenraum bleibt beleuchtet
       shaft.material.opacity = 0.11 + Math.sin(t * 2.2) * 0.04;
       innerLight.intensity = 3.2 + Math.sin(t * 5) * 0.5;
     }
@@ -1025,9 +1030,11 @@
       innerLight.intensity = (1 - c) * 3;
       shaft.material.opacity = (1 - c) * 0.15;
       var fade = 1 - c;
-      gemGlow.material.opacity = fade * 0.5;
-      rays.material.opacity = fade * 0.5;
-      gem.scale.setScalar(Math.max(0.001, fade));
+      if (SHOW_GEM) {
+        gemGlow.material.opacity = fade * 0.5;
+        rays.material.opacity = fade * 0.5;
+        gem.scale.setScalar(Math.max(0.001, fade));
+      }
       if (c >= 1) {
         state = 'idle';
         taps = 0;
