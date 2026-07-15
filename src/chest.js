@@ -152,12 +152,19 @@
   var tintModel = true; // false bei texturierten KI-/GLB-Modellen: Texturen bleiben
   var matByName = {};   // benannte Modell-Materialien (Wood, DarkMetal, ...)
 
-  // Fugenhöhe für den automatischen Deckel-Schnitt bei GLB-Modellen ohne
-  // separaten Deckel-Node (Anteil der Modellhöhe, von unten gemessen).
-  var LID_SEAM = window.__SEAM || 0.62;   // Fugenhöhe für den Auto-Deckel-Schnitt
-  // Y-Drehung des GLB-Modells, damit die Schloss-Front zur Kamera zeigt
-  // (die Meshy-Kristalltruhe ist 90° gedreht ausgerichtet).
-  var MODEL_YAW = window.__YAW != null ? window.__YAW : Math.PI / 2;
+  // ---------- Mehrere Truhen ----------
+  // Truhen werden in window.__CHESTS registriert (assets/chest-<id>.js):
+  //   window.__CHESTS['blau'] = { glb, tex, yaw, seam, lidOpen }
+  // Das Spiel wählt vor dem Öffnen per window.CHEST = '<id>' bzw.
+  //   webView.evaluateJavaScript("window.__chest.loadChest('<id>')").
+  var DEFAULT_CHEST = 'blau';
+  var activeCfg = null;     // aktive Truhen-Konfiguration
+  var currentModel = null;  // aktuell geladenes Modell (zum Entfernen beim Wechsel)
+
+  // Fugenhöhe / Y-Drehung / Öffnungswinkel — pro Truhe (aus der Konfiguration),
+  // per URL überschreibbar (__SEAM/__YAW/__LIDOPEN) fürs Feintuning.
+  var LID_SEAM = 0.62;
+  var MODEL_YAW = Math.PI / 2;
 
   // Gemeinsamer Abschluss für beide Modell-Pfade (handgebaut & GLB)
   function finishModel(model) {
@@ -176,8 +183,9 @@
     // wird in der Claude-App/iOS von der CSP blockiert → Modell bliebe weiß).
     // TextureLoader nutzt ein HTML-Image, das mit data: überall zuverlässig lädt.
     var colorMap = null;
-    if (!tintModel && window.__CHEST_TEX_B64) {
-      colorMap = new THREE.TextureLoader().load('data:image/jpeg;base64,' + window.__CHEST_TEX_B64);
+    var texB64 = activeCfg ? activeCfg.tex : window.__CHEST_TEX_B64;
+    if (!tintModel && texB64) {
+      colorMap = new THREE.TextureLoader().load('data:image/jpeg;base64,' + texB64);
       colorMap.flipY = false;            // glTF-Konvention
       colorMap.encoding = THREE.sRGBEncoding;
       colorMap.wrapS = colorMap.wrapT = THREE.RepeatWrapping;
@@ -209,6 +217,7 @@
     });
 
     chest.add(model);
+    currentModel = model;
 
     // Effekt-Positionen an die echte Modellhöhe anpassen
     innerLight.position.y = H * 0.9;
@@ -429,7 +438,7 @@
       lidRestX = 0;
       // Massiver Block ohne echten Hohlraum → flacher öffnen, damit die
       // Schnittfläche verdeckt bleibt (sofern nicht per URL überschrieben).
-      if (!window.__LIDOPEN) LID_OPEN = -0.75;
+      if (!window.__LIDOPEN) LID_OPEN = (activeCfg && activeCfg.lidOpen != null) ? activeCfg.lidOpen : -0.75;
       finishModel(model);
     }, function (err) {
       if (window.console) console.error('GLB konnte nicht geladen werden, nutze eingebaute Truhe', err);
@@ -440,14 +449,38 @@
   // Wird am Skript-Ende aufgerufen — greift auf Effekte (shaft, gem, ...) zu,
   // die erst weiter unten definiert werden.
   // Reihenfolge: eingebettetes GLB (Base64) → assets/chest.glb → handgebaute Truhe.
-  function loadModel() {
-    if (window.__CHEST_GLB_B64) {
-      var bin = atob(window.__CHEST_GLB_B64);
-      var bytes = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      useGlbModel(bytes.buffer);
+  function decodeB64(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  // Lädt eine Truhe nach ID (aus window.__CHESTS). Ohne ID: window.CHEST bzw.
+  // die Standard-Truhe. Setzt den Zustand zurück und tauscht das Modell aus.
+  function loadChest(id) {
+    id = id || window.CHEST || DEFAULT_CHEST;
+    window.CHEST = id;
+
+    if (currentModel) { chest.remove(currentModel); currentModel = null; }
+    clearRewards();
+    btnEl.classList.remove('show');
+    state = 'idle'; taps = 0; tapAnim = 0;
+    chest.rotation.z = 0; chest.scale.set(1, 1, 1); chest.position.y = 0;
+    modelReady = false; lidGroup = null;
+
+    var reg = window.__CHESTS || {};
+    var cfg = reg[id];
+    if (cfg) {
+      activeCfg = cfg;
+      MODEL_YAW = (window.__YAW != null) ? window.__YAW : (cfg.yaw != null ? cfg.yaw : Math.PI / 2);
+      LID_SEAM = (window.__SEAM != null) ? window.__SEAM : (cfg.seam != null ? cfg.seam : 0.62);
+      useGlbModel(decodeB64(cfg.glb));
       return;
     }
+    // Rückwärtskompatibel: einzelne eingebettete Truhe oder Datei / Fallback
+    activeCfg = null;
+    if (window.__CHEST_GLB_B64) { useGlbModel(decodeB64(window.__CHEST_GLB_B64)); return; }
     if (window.fetch && location.protocol !== 'file:') {
       fetch('assets/chest.glb')
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
@@ -1096,21 +1129,18 @@
     renderer.render(scene, camera);
   }
 
-  loadModel();
+  loadChest();
   animate();
 
-  // Debug-/Test-Hooks (auch praktisch für automatisierte UI-Tests)
+  // Öffentliche API + Debug-/Test-Hooks
   window.__chest = {
+    // Truhe wählen (z.B. aus dem Spiel): window.__chest.loadChest('blau')
+    loadChest: loadChest,
+    chests: function () { return Object.keys(window.__CHESTS || {}); },
     setTier: function (i) { applyTier(TIERS[i]); },
     applyTierRaw: applyTier,
     open: function () { if (state === 'idle' && modelReady) startOpen(); },
     setLid: setLidAngle,
-    mats: function () {
-      return Object.keys(matByName).map(function (n) {
-        var m = matByName[n];
-        return n + ':' + m.color.getHexString() + ' vc:' + !!m.vertexColors + ' map:' + !!m.map;
-      });
-    },
     ready: function () { return modelReady; },
     state: function () { return state; }
   };

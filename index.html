@@ -89,6 +89,17 @@
 
   #flash { position: fixed; inset: 0; background: #fff8e6; opacity: 0; pointer-events: none; }
 
+  /* Demo-Umschalter (nur Vorschau; im Spiel wählst du per window.__chest.loadChest) */
+  #switchBtn {
+    position: fixed; right: 12px; top: max(12px, env(safe-area-inset-top));
+    z-index: 6; padding: 7px 14px; border-radius: 999px;
+    background: rgba(10, 16, 30, 0.7); color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.18);
+    font: 700 12px/1 system-ui, sans-serif; letter-spacing: 0.04em;
+    cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  }
+  #switchBtn:active { transform: translateY(1px); }
+
   @media (prefers-reduced-motion: reduce) {
     #hint { animation: none; }
   }
@@ -169,13 +180,28 @@
   <div id="rewardBottom"></div>
   <div id="hint">Tippe die Truhe an!</div>
   <button id="againBtn" type="button">Nochmal öffnen</button>
+  <button id="switchBtn" type="button">Truhe wechseln</button>
   <div id="flash"></div>
   <script src="vendor/three.min.js"></script>
   <script src="vendor/GLTFLoader.js"></script>
   <script src="vendor/RoomEnvironment.js"></script>
   <script src="vendor/RoundedBoxGeometry.js"></script>
   <script src="src/chest-model.js"></script>
-  <script src="assets/chest-glb.js"></script>
+  <script src="assets/chest-blau.js"></script>
+  <script src="assets/chest-silber.js"></script>
   <script src="src/chest.js"></script>
+  <script>
+    // Demo-Umschalter: klickt durch alle registrierten Truhen (nur Vorschau)
+    (function () {
+      var btn = document.getElementById('switchBtn');
+      btn.addEventListener('click', function () {
+        var ids = (window.__chest && window.__chest.chests()) || [];
+        if (ids.length < 2) return;
+        var cur = window.CHEST || ids[0];
+        var next = ids[(ids.indexOf(cur) + 1) % ids.length];
+        window.__chest.loadChest(next);
+      });
+    })();
+  </script>
 </body>
 </html>
