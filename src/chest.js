@@ -629,26 +629,31 @@
     currentCard = card; currentItem = item;
     chime();
   }
+  var rewardList = [], rewardIdx = 0;
+
   function startRewards() {
     clearRewards();
     var count = 1 + Math.floor(Math.random() * 5);   // 1..5
-    var list = [];
-    for (var i = 0; i < count; i++) list.push(pickReward());
-    notifyApp({ event: 'opened', chest: tier.label, rewards: list.map(function (r) { return r.name; }) });
+    rewardList = [];
+    for (var i = 0; i < count; i++) rewardList.push(pickReward());
+    rewardIdx = 0;
+    notifyApp({ event: 'opened', chest: tier.label, rewards: rewardList.map(function (r) { return r.name; }) });
+    advanceReward();   // erste Belohnung zeigen (bleibt bis zum nächsten Tippen)
+  }
 
-    var idx = 0;
-    function step() {
-      demoteCurrent();                 // vorige Belohnung nach unten schieben
-      if (idx < list.length) {
-        showReward(list[idx]);
-        idx++;
-        rewardTimers.push(setTimeout(step, 950));
-      } else {
-        // alle gezeigt & eingesammelt → „Nochmal öffnen" anbieten
-        rewardTimers.push(setTimeout(function () { btnEl.classList.add('show'); }, 350));
-      }
+  // Zeigt die nächste Belohnung; die aktuelle wandert dabei nach unten. Wird pro
+  // Antippen (im geöffneten Zustand) einmal aufgerufen. Nach der letzten Belohnung
+  // erscheint der „Nochmal öffnen"-Button.
+  function advanceReward() {
+    demoteCurrent();
+    if (rewardIdx < rewardList.length) {
+      showReward(rewardList[rewardIdx]);
+      rewardIdx++;
+      setHint(rewardIdx < rewardList.length ? 'Tippen für die nächste Belohnung' : 'Tippen zum Abschließen');
+    } else {
+      hintEl.classList.add('hidden');
+      btnEl.classList.add('show');
     }
-    step();
   }
 
   // ---------- Truhen-Stufen ----------
@@ -893,7 +898,15 @@
   var pointer = new THREE.Vector2();
 
   renderer.domElement.addEventListener('pointerdown', function (ev) {
-    if (state !== 'idle' || !modelReady) return;
+    if (!modelReady) return;
+
+    // Im geöffneten Zustand deckt jedes Tippen die nächste Belohnung auf.
+    if (state === 'opened') {
+      advanceReward();
+      return;
+    }
+    if (state !== 'idle') return;
+
     pointer.x = (ev.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(ev.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
