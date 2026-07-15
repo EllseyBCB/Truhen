@@ -96,12 +96,25 @@
   /* ---------- Belohnungs-Abfolge ---------- */
   /* Neue Belohnung erscheint oben-links über der Truhe (#rewardTop),
      fertige Belohnungen sammeln sich als Kärtchen unter der Truhe (#rewardBottom). */
+  /* Belohnung erscheint mittig über der Truhe, im Lichtstrahl der Truhe */
   #rewardTop {
-    position: fixed; left: 6%; top: 11%;
-    width: 128px; height: 150px;
+    position: fixed; left: 50%; top: 19%;
+    transform: translateX(-50%);
+    width: 130px; height: 156px;
     pointer-events: none; z-index: 5;
   }
-  #rewardTop .rcard { position: absolute; top: 0; left: 0; }
+  /* weicher Lichtschein hinter der Karte — das Item liegt „im Licht" */
+  #rewardTop::before {
+    content: ''; position: absolute;
+    left: 50%; top: 46%; transform: translate(-50%, -50%);
+    width: 340px; height: 440px;
+    background: radial-gradient(ellipse 42% 50% at 50% 50%,
+      rgba(214, 234, 255, 0.72), rgba(150, 198, 255, 0.28) 42%, rgba(120,170,255,0) 70%);
+    filter: blur(4px); z-index: -1; pointer-events: none;
+    opacity: 0; transition: opacity .5s ease;
+  }
+  #rewardTop.lit::before { opacity: 1; }
+  #rewardTop .rcard { position: absolute; top: 0; left: 1px; }
   #rewardBottom {
     position: fixed; left: 50%; bottom: 20%;
     transform: translateX(-50%);
@@ -115,8 +128,8 @@
     background: rgba(10, 16, 30, 0.82);
     border: 2px solid var(--rc, #54b6ff);
     box-shadow: 0 0 22px 2px var(--rc, #54b6ff), 0 8px 24px rgba(0,0,0,.4);
-    opacity: 0; transform: scale(0.5) translateY(12px);
-    transition: opacity .3s ease, transform .45s cubic-bezier(.18,1.7,.4,1);
+    opacity: 0; transform: scale(0.4) translateY(46px);
+    transition: opacity .35s ease, transform .5s cubic-bezier(.18,1.7,.4,1);
   }
   .rcard.in { opacity: 1; transform: scale(1) translateY(0); }
   .rcard.flydown { opacity: 0; transform: scale(0.4) translateY(130px); transition: opacity .3s ease, transform .3s ease; }

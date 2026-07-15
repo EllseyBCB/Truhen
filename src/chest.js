@@ -212,7 +212,7 @@
 
     // Effekt-Positionen an die echte Modellhöhe anpassen
     innerLight.position.y = H * 0.9;
-    shaft.position.y = H + 1.5;
+    shaft.position.y = H + 2.2;
     GEM_Y = H + 0.85;
     LOOK_AT.y = H * 0.52;
 
@@ -481,7 +481,7 @@
     g.fillRect(0, 0, s, s);
   });
   var shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.95, 0.5, 3.4, 24, 1, true),
+    new THREE.CylinderGeometry(1.35, 0.45, 5.2, 24, 1, true),
     new THREE.MeshBasicMaterial({
       color: 0xffd97a, transparent: true, opacity: 0, alphaMap: shaftAlpha,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
@@ -584,6 +584,7 @@
     rewardTimers.forEach(clearTimeout);
     rewardTimers = [];
     rewardTopEl.innerHTML = '';
+    rewardTopEl.classList.remove('lit');
     rewardBottomEl.innerHTML = '';
     currentCard = null; currentItem = null;
   }
@@ -628,6 +629,7 @@
   function showReward(item) {
     var card = makeCard(item);
     rewardTopEl.appendChild(card);
+    rewardTopEl.classList.add('lit');   // Lichtschein hinter der Karte an
     requestAnimationFrame(function () { card.classList.add('in'); });
     currentCard = card; currentItem = item;
     chime();
@@ -654,6 +656,7 @@
       rewardIdx++;
       setHint(rewardIdx < rewardList.length ? 'Tippen für die nächste Belohnung' : 'Tippen zum Abschließen');
     } else {
+      rewardTopEl.classList.remove('lit');   // kein Item mehr oben → Licht aus
       hintEl.classList.add('hidden');
       btnEl.classList.add('show');
     }
@@ -1018,9 +1021,9 @@
         rays.material.rotation -= dt * 0.45;
         rays.material.opacity = 0.7;
       }
-      // Lichtsäule beruhigt sich, Innenraum bleibt beleuchtet
-      shaft.material.opacity = 0.11 + Math.sin(t * 2.2) * 0.04;
-      innerLight.intensity = 3.2 + Math.sin(t * 5) * 0.5;
+      // Kräftiger Lichtstrahl leuchtet weiter aus der Truhe (Item liegt darin)
+      shaft.material.opacity = 0.32 + Math.sin(t * 2.2) * 0.05;
+      innerLight.intensity = 4.6 + Math.sin(t * 5) * 0.6;
     }
 
     if (state === 'closing') {
