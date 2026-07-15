@@ -92,6 +92,58 @@
   @media (prefers-reduced-motion: reduce) {
     #hint { animation: none; }
   }
+
+  /* ---------- Belohnungs-Abfolge ---------- */
+  /* Neue Belohnung erscheint oben-links über der Truhe (#rewardTop),
+     fertige Belohnungen sammeln sich als Kärtchen unter der Truhe (#rewardBottom). */
+  #rewardTop {
+    position: fixed; left: 6%; top: 11%;
+    width: 128px; height: 150px;
+    pointer-events: none; z-index: 5;
+  }
+  #rewardTop .rcard { position: absolute; top: 0; left: 0; }
+  #rewardBottom {
+    position: fixed; left: 50%; bottom: 20%;
+    transform: translateX(-50%);
+    display: flex; gap: 7px; flex-wrap: nowrap;
+    justify-content: center; max-width: 94%;
+    pointer-events: none; z-index: 5;
+  }
+  .rcard {
+    width: 128px; padding: 10px 10px 12px;
+    border-radius: 18px;
+    background: rgba(10, 16, 30, 0.82);
+    border: 2px solid var(--rc, #54b6ff);
+    box-shadow: 0 0 22px 2px var(--rc, #54b6ff), 0 8px 24px rgba(0,0,0,.4);
+    opacity: 0; transform: scale(0.5) translateY(12px);
+    transition: opacity .3s ease, transform .45s cubic-bezier(.18,1.7,.4,1);
+  }
+  .rcard.in { opacity: 1; transform: scale(1) translateY(0); }
+  .rcard.flydown { opacity: 0; transform: scale(0.4) translateY(130px); transition: opacity .3s ease, transform .3s ease; }
+  .rcard .icon {
+    width: 108px; height: 88px; border-radius: 12px;
+    background: radial-gradient(circle at 50% 36%, #ffffff, var(--rc, #54b6ff) 60%, #0a1420 100%);
+    background-size: cover; background-position: center;
+  }
+  .rcard .rrar {
+    margin-top: 8px; text-align: center;
+    font: 800 12px/1 system-ui, sans-serif;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--rc, #54b6ff);
+  }
+  .rchip {
+    width: 48px; padding: 5px; border-radius: 12px;
+    background: rgba(10, 16, 30, 0.8);
+    border: 1.5px solid var(--rc, #54b6ff);
+    box-shadow: 0 0 12px var(--rc, #54b6ff);
+    opacity: 0; transform: scale(0.4);
+    transition: opacity .25s ease, transform .3s cubic-bezier(.18,1.7,.4,1);
+  }
+  .rchip.in { opacity: 1; transform: scale(1); }
+  .rchip .icon {
+    width: 100%; height: 40px; border-radius: 8px;
+    background: radial-gradient(circle at 50% 36%, #ffffff, var(--rc, #54b6ff) 60%, #0a1420 100%);
+    background-size: cover; background-position: center;
+  }
 </style>
 </head>
 <body>
@@ -100,6 +152,8 @@
     <div class="eyebrow">Truhen-Prototyp · <b>3D-Demo</b></div>
   </div>
   <div id="banner"><div class="rarity"></div><div class="sub"></div></div>
+  <div id="rewardTop"></div>
+  <div id="rewardBottom"></div>
   <div id="hint">Tippe die Truhe an!</div>
   <button id="againBtn" type="button">Nochmal öffnen</button>
   <div id="flash"></div>

@@ -548,6 +548,108 @@
   var subEl = bannerEl.querySelector('.sub');
   var btnEl = document.getElementById('againBtn');
   var flashEl = document.getElementById('flash');
+  var rewardTopEl = document.getElementById('rewardTop');
+  var rewardBottomEl = document.getElementById('rewardBottom');
+
+  // ---------- Belohnungs-Abfolge ----------
+  // Pro Öffnung kommen 1–5 Belohnungen. Die neue erscheint oben-links über der
+  // Truhe; sobald die nächste kommt, wandert die vorige als Kärtchen nach unten
+  // in die „Gesammelt"-Reihe unter der Truhe.
+  //
+  // Eigene Item-Bilder später: einfach im Pool `image` auf eine Bild-URL bzw.
+  // Daten-URI setzen — dann zeigt das Kärtchen dein Bild statt des Platzhalters.
+  var REWARD_POOL = [
+    { name: 'Häufig',   css: '#c9d4e6', weight: 0.42, image: null },
+    { name: 'Selten',   css: '#54b6ff', weight: 0.30, image: null },
+    { name: 'Episch',   css: '#b06cff', weight: 0.18, image: null },
+    { name: 'Legendär', css: '#ffc94d', weight: 0.10, image: null }
+  ];
+
+  function pickReward() {
+    var r = Math.random(), acc = 0;
+    for (var i = 0; i < REWARD_POOL.length; i++) {
+      acc += REWARD_POOL[i].weight;
+      if (r < acc) return REWARD_POOL[i];
+    }
+    return REWARD_POOL[0];
+  }
+
+  var rewardTimers = [];
+  var currentCard = null, currentItem = null;
+
+  function clearRewards() {
+    rewardTimers.forEach(clearTimeout);
+    rewardTimers = [];
+    rewardTopEl.innerHTML = '';
+    rewardBottomEl.innerHTML = '';
+    currentCard = null; currentItem = null;
+  }
+  function makeIcon(item, size) {
+    var ic = document.createElement('div');
+    ic.className = 'icon';
+    if (item.image) ic.style.backgroundImage = 'url(' + item.image + ')';
+    ic.style.setProperty('--rc', item.css);
+    return ic;
+  }
+  function makeCard(item) {
+    var c = document.createElement('div');
+    c.className = 'rcard';
+    c.style.setProperty('--rc', item.css);
+    c.appendChild(makeIcon(item));
+    var lbl = document.createElement('div');
+    lbl.className = 'rrar';
+    lbl.textContent = item.name;
+    c.appendChild(lbl);
+    return c;
+  }
+  function makeChip(item) {
+    var c = document.createElement('div');
+    c.className = 'rchip';
+    c.style.setProperty('--rc', item.css);
+    c.appendChild(makeIcon(item));
+    return c;
+  }
+  function demoteCurrent() {
+    if (!currentCard) return;
+    var card = currentCard, it = currentItem;
+    card.classList.add('flydown');
+    var t = setTimeout(function () {
+      if (card.parentNode) card.parentNode.removeChild(card);
+      var chip = makeChip(it);
+      rewardBottomEl.appendChild(chip);
+      requestAnimationFrame(function () { chip.classList.add('in'); });
+    }, 260);
+    rewardTimers.push(t);
+    currentCard = null; currentItem = null;
+  }
+  function showReward(item) {
+    var card = makeCard(item);
+    rewardTopEl.appendChild(card);
+    requestAnimationFrame(function () { card.classList.add('in'); });
+    currentCard = card; currentItem = item;
+    chime();
+  }
+  function startRewards() {
+    clearRewards();
+    var count = 1 + Math.floor(Math.random() * 5);   // 1..5
+    var list = [];
+    for (var i = 0; i < count; i++) list.push(pickReward());
+    notifyApp({ event: 'opened', chest: tier.label, rewards: list.map(function (r) { return r.name; }) });
+
+    var idx = 0;
+    function step() {
+      demoteCurrent();                 // vorige Belohnung nach unten schieben
+      if (idx < list.length) {
+        showReward(list[idx]);
+        idx++;
+        rewardTimers.push(setTimeout(step, 950));
+      } else {
+        // alle gezeigt & eingesammelt → „Nochmal öffnen" anbieten
+        rewardTimers.push(setTimeout(function () { btnEl.classList.add('show'); }, 350));
+      }
+    }
+    step();
+  }
 
   // ---------- Truhen-Stufen ----------
   // Pro Stufe: Farben für die benannten Modell-Materialien + Effektfarbe.
@@ -779,20 +881,11 @@
     hintEl.classList.add('hidden');
   }
 
-  function showBanner() {
-    rarityEl.textContent = tier.reward;
-    subEl.textContent = tier.rewardSub;
-    bannerEl.style.setProperty('--rarity', tier.css);
-    bannerEl.classList.add('show');
-    btnEl.classList.add('show');
-    notifyApp({ event: 'opened', chest: tier.label, rarity: tier.reward, item: tier.rewardSub });
-  }
-
   function reset() {
     state = 'closing';
     closeT = 0;
-    bannerEl.classList.remove('show');
     btnEl.classList.remove('show');
+    clearRewards();
   }
 
   // ---------- Eingabe ----------
@@ -895,7 +988,7 @@
 
       if (openT > 1.6) {
         state = 'opened';
-        showBanner();
+        startRewards();
       }
     }
 
