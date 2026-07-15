@@ -294,46 +294,84 @@
     return { lower: build(lower), upper: build(upper) };
   }
 
-  // Formschlüssiges Metallband an der Fuge: aus einem dünnen Querschnitt der
-  // Truhe selbst gebaut, minimal nach außen skaliert. Dadurch folgt es exakt
-  // der Truhenkontur, steht leicht über und überdeckt die Schnittkante von
-  // außen — geschlossen ist die Kante gar nicht mehr sichtbar. Sitzt am Korpus.
-  function addSeamBelt(meshes, box, seamY, body) {
-    var cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  // Baut einen sauberen, dunklen Innenraum + glatte Randlippe, damit die
+  // aufgeschnittene Truhe nicht „zerrissen/hohl" wirkt, sondern wie ein
+  // echter Behälter mit Platz für die Belohnung.
+  function buildChestInterior(meshes, box, seamY, backZ, body, lid) {
     var modelH = box.max.y - box.min.y;
-    var bh = modelH * 0.045;     // halbe Bandhöhe (überlappt Fuge nach oben & unten)
-    var scaleXZ = 1.045;         // steht leicht über die Oberfläche
 
-    var frameMat = new THREE.MeshStandardMaterial({
-      color: 0xc4d3e6, metalness: 0.6, roughness: 0.4  // eisiges Silber wie die Beschläge
-    });
-    frameMat.envMapIntensity = 0.2;
-    frameMat.userData.frame = true;  // nicht mit der Truhen-Textur überziehen
-
-    var positions = [], normals = [], hasN = true;
+    // 1) Öffnungs-Umriss an der Fuge aus der echten Geometrie ermitteln
+    //    (enger als die Bounding-Box, die die breitesten Stellen einschließt).
+    var d = modelH * 0.04;
+    var oxMin = Infinity, oxMax = -Infinity, ozMin = Infinity, ozMax = -Infinity, n = 0;
     meshes.forEach(function (m) {
       var g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
       g.applyMatrix4(m.matrixWorld);
-      var pos = g.attributes.position, nor = g.attributes.normal;
-      if (!nor) hasN = false;
-      for (var i = 0; i < pos.count; i += 3) {
-        var cyT = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
-        if (cyT < seamY - bh || cyT > seamY + bh) continue;
-        for (var v = 0; v < 3; v++) {
-          positions.push(cx + (pos.getX(i + v) - cx) * scaleXZ, pos.getY(i + v), cz + (pos.getZ(i + v) - cz) * scaleXZ);
-          if (nor) normals.push(nor.getX(i + v), nor.getY(i + v), nor.getZ(i + v));
-        }
+      var pos = g.attributes.position;
+      for (var i = 0; i < pos.count; i++) {
+        var yy = pos.getY(i);
+        if (yy < seamY - d || yy > seamY + d) continue;
+        var xx = pos.getX(i), zz = pos.getZ(i);
+        if (xx < oxMin) oxMin = xx; if (xx > oxMax) oxMax = xx;
+        if (zz < ozMin) ozMin = zz; if (zz > ozMax) ozMax = zz;
+        n++;
       }
     });
-    if (!positions.length) return;
+    if (n < 20) { oxMin = box.min.x; oxMax = box.max.x; ozMin = box.min.z; ozMax = box.max.z; }
 
-    var bg = new THREE.BufferGeometry();
-    bg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    if (hasN && normals.length) bg.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    else bg.computeVertexNormals();
-    var belt = new THREE.Mesh(bg, frameMat);
-    belt.castShadow = true;
-    body.add(belt);
+    // Etwas nach innen rücken, damit Rand/Innenraum nie über die Truhensilhouette
+    // hinausragen (der Umriss erfasst auch die breitesten Stellen wie Eckpfosten).
+    var oin = Math.min(oxMax - oxMin, ozMax - ozMin) * 0.10;
+    oxMin += oin; oxMax -= oin; ozMin += oin; ozMax -= oin;
+
+    var spanX = oxMax - oxMin, spanZ = ozMax - ozMin;
+    var cx = (oxMin + oxMax) / 2, cz = (ozMin + ozMax) / 2;
+
+    // Materialien
+    var silver = new THREE.MeshStandardMaterial({ color: 0xc4d3e6, metalness: 0.6, roughness: 0.4 });
+    silver.envMapIntensity = 0.2;
+    silver.userData.frame = true;
+    var dark = new THREE.MeshStandardMaterial({ color: 0x0a1524, metalness: 0.1, roughness: 1 });
+    dark.userData.frame = true;
+
+    // 2) Randlippe (Bilderrahmen) am oberen Korpusrand — verdeckt die Schnittkante
+    var rimW = Math.min(spanX, spanZ) * 0.11;      // Breite der Lippe
+    var rimH = modelH * 0.022;                      // Dicke der Lippe
+    var inX0 = oxMin + rimW, inX1 = oxMax - rimW;   // inneres Öffnungsrechteck
+    var inZ0 = ozMin + rimW, inZ1 = ozMax - rimW;
+    var inSpanX = inX1 - inX0, inSpanZ = inZ1 - inZ0;
+
+    function bar(w, h, dd, x, y, z, mat, group) {
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), mat);
+      m.position.set(x, y, z);
+      m.castShadow = true; m.receiveShadow = true;
+      group.add(m);
+    }
+    function rimFrame(group, yC, zOff) {
+      // vorne/hinten (entlang X) + links/rechts (entlang Z)
+      bar(spanX, rimH, rimW, cx, yC, ozMin + rimW / 2 + zOff, silver, group);
+      bar(spanX, rimH, rimW, cx, yC, ozMax - rimW / 2 + zOff, silver, group);
+      bar(rimW, rimH, spanZ - 2 * rimW, oxMin + rimW / 2, yC, cz + zOff, silver, group);
+      bar(rimW, rimH, spanZ - 2 * rimW, oxMax - rimW / 2, yC, cz + zOff, silver, group);
+    }
+    rimFrame(body, seamY - rimH / 2, 0);
+
+    // 3) Dunkler Innenraum: 4 Wände + Boden (inneres Rechteck), von der Fuge
+    //    hinab — man sieht einen echten flachen Hohlraum statt hohler Rückwand.
+    var wallT = rimW * 0.5;
+    var cavDepth = modelH * 0.32;
+    var floorY = seamY - cavDepth;
+    var wallCY = seamY - cavDepth / 2;
+    bar(inSpanX, cavDepth, wallT, cx, wallCY, inZ0 + wallT / 2, dark, body);
+    bar(inSpanX, cavDepth, wallT, cx, wallCY, inZ1 - wallT / 2, dark, body);
+    bar(wallT, cavDepth, inSpanZ, inX0 + wallT / 2, wallCY, cz, dark, body);
+    bar(wallT, cavDepth, inSpanZ, inX1 - wallT / 2, wallCY, cz, dark, body);
+    bar(inSpanX, modelH * 0.03, inSpanZ, cx, floorY, cz, dark, body);   // Boden
+
+    // 4) Deckel: dunkle Unterseiten-Kappe + Silberrand an der Deckel-Unterkante.
+    //    lid-Gruppe ist um (0,-seamY,-backZ) verschoben → lid-lokal y=0 an der Fuge.
+    bar(inSpanX, modelH * 0.03, inSpanZ, cx, modelH * 0.02, cz - backZ, dark, lid);
+    rimFrame(lid, rimH / 2, -backZ);
   }
 
   function useGlbModel(arrayBuffer) {
@@ -384,8 +422,8 @@
         }
       });
 
-      // Formschlüssiges Metallband überdeckt die Schnittkante von außen.
-      addSeamBelt(meshes, box, seamY, body);
+      // Sauberer dunkler Innenraum + glatte Randlippe (statt „zerrissen/hohl").
+      buildChestInterior(meshes, box, seamY, backZ, body, lid);
 
       lidGroup = lid;
       lidRestX = 0;
