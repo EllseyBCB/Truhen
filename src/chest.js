@@ -212,7 +212,7 @@
 
     // Effekt-Positionen an die echte Modellhöhe anpassen
     innerLight.position.y = H * 0.9;
-    shaft.position.y = H + 2.2;
+    shaft.position.y = H + 3.1;
     GEM_Y = H + 0.85;
     LOOK_AT.y = H * 0.52;
 
@@ -481,7 +481,7 @@
     g.fillRect(0, 0, s, s);
   });
   var shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.35, 0.45, 5.2, 24, 1, true),
+    new THREE.CylinderGeometry(1.7, 0.45, 7.0, 24, 1, true),
     new THREE.MeshBasicMaterial({
       color: 0xffd97a, transparent: true, opacity: 0, alphaMap: shaftAlpha,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
